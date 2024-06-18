@@ -1,0 +1,313 @@
+---
+title: "Append to envirodata"
+output: html_document
+date: "2023-11-23"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+load libraries
+```{r}
+source("PA-paper/LoadPackages_PA.R")
+library(sf)
+```
+
+bring in and format presences and pseudo-absences
+```{r}
+presence<-read.csv("20231129SSMoutput.csv")
+
+# List all files in the directory
+files <- list.files("PA-paper/output.Predicted")
+csv_files <- files[grepl("\\.csv$", files)]
+
+# Initialize an empty data frames
+crw_data <- data.frame()
+background_data <- data.frame()
+
+# Loop through each file
+for (file in csv_files) {
+  
+  # Extract the tag from the file name
+  tag <- gsub(".*sim_|.csv.*", "", file) #start here
+  cat("doing", file, "n/")
+  # Check the file name to determine the data type
+  if (grepl("^crw_sim", file)) {
+    data_type <- "crw"
+  } else if (grepl("^backgroundpts_sim", file)) {
+    data_type <- "background"
+  } else {
+    stop("Invalid file name:", file)
+  }
+
+  # Extract the tag from the file name
+  tag <- gsub(".*sim_|.csv.*", "", file) #start here
+
+  # Read the data from the file
+  file_data <- read.csv(paste("PA-paper/output.Predicted/", file, sep=""))
+
+  # Add columns for data type and tag
+  file_data$data_type <- data_type
+  file_data$tag <- tag
+
+  # Add data to the appropriate data frame
+  if (data_type == "crw") {
+    crw_data <- rbind(crw_data, file_data)
+  } else {
+    background_data <- rbind(background_data, file_data)
+  }
+}
+
+#write.csv(background_data, file="PA-paper/background.csv")
+#write.csv(crw_data, file="PA-paper/crw_data.csv")
+```
+Combine presences, crw and background data
+```{r}
+crw_data<-read.csv("PA-paper/crw_data.csv")
+background_data<-read.csv("PA-paper/background.csv")
+
+presence1<-presence |> dplyr::select(c(id, lon, lat, date))
+presence1$data_type<-"track"
+presence1$iteration<-NA
+presence1<-presence1 |> mutate(date=as.POSIXct(date, format="%Y-%m-%d %H:%M:%S"))
+
+background_data<-background_data |> 
+  mutate(id=tag, date=as.POSIXct(dTime, format="%Y-%m-%d %H:%M:%S")) |> 
+  dplyr::select(!c(X,dTime, step, ID, optional, tag))
+
+crw_data<-crw_data |> 
+  mutate(id=tag, lon=x, lat=y, date=as.POSIXct(t, format="%Y-%m-%d %H:%M:%S")) |> 
+  dplyr::select(!c(X,tag, flag, t, x, y))
+
+all<-rbind(presence1, background_data, crw_data)
+all$date1<-as.POSIXct(all$date, format="%Y-%m-%d %H:%M:%S")
+#write.csv(all, file="20231206combinedPA.csv")
+```
+
+# Extracting spatial and spatio-temporal environmental covariates
+
+1. Static variables
+Sampled predictor layers (creation/modification of source datasets specified in Table 1 of the paper)
+Created a mask layer from the extent of the Carter et al. dataset ("mask.tif")
+Clipped input datasets to this extent
+
+QGIS a) sample raster tool for grid data, and b)join attributes by location tool for shapefile (categorical) data
+
+for b) features contain or overlap points. Join type one to many.
+
+## Shapefiles
+- built features
+- geohabitat
+- geomorphology
+- seagrass community type
+
+
+## Rasters
+- bathymetry
+- distance to rivers 
+- distance to reefs
+- distance to coast
+- distance to rec boats
+- seagrass probability
+- relative tidal exposure
+- MMP - frequency of exposure to WT1 and WT2 2003-2022
+- MMP - longterm exposure
+- ruggedness
+- slope
+
+
+2. DEA mangrove extraction
+```{r}
+#Extracted yearly raster via DEA sandbox environment
+#Filtered for values 1-4 in qgis
+#Proximity rasters in qgis
+#Append per matching year:
+# pts<-nas%>%mutate(date1=as.Date(aus.date))
+# clipped<-read.csv("PA-paper/crw_data.csv")
+# 
+# df2_selected<-clipped %>%
+#   rename(lat=y,
+#          lon=x,
+#          id=tag,
+#          date=t)%>%
+#   dplyr::select(id, lon, lat, data_type, iteration, date)%>%
+#   mutate(date1=as.Date(date))
+# filtered<-pts%>%
+#   left_join(df2_selected, by=c("lat", "lon", "id", "data_type", "iteration", "date1"))
+# 
+# #convert timestamp to year
+# filtered$date<-as.POSIXct(filtered$date.y, format="%Y-%m-%d %H:%M:%S")
+# filtered<-filtered |> mutate(aus.date=date+hours(10))
+# points<-filtered%>%mutate(aus.date=as.Date(aus.date))
+
+# points$year <- format(as.Date(points$aus.date), "%Y")
+# 
+# 
+# pts_sf<-st_as_sf(points, coords=c("lon", "lat"), crs=4326)
+# 
+# 
+# raster_list<-lapply(2010:2022, function(year) raster(paste0("enviro datasets/DEA mangroves/Reprojected", year, ".tif")))
+```
+
+
+```{r}
+# pts_sf$deamangrove<-NA
+# 
+# for(i in 1:length(raster_list)){
+#   year <- 2010 + i - 1  # Calculate the corresponding year
+#   cat("doing", year)
+#   matching<-which(pts_sf$year==year)
+#   if(length(matching)>0){
+#     # Extract raster values for matching points
+#     pts_sf[matching,]$deamangrove <- raster::extract(raster_list[[i]], st_coordinates(pts_sf[matching, ]), method='simple')
+# 
+#     # Assign extracted values to the raster_value column in points
+# 
+#   }
+# }
+```
+
+
+4.eReefs:
+EFI, wind speed, current, salinity, Secchi depth, temperature, zooplankton N
+```{r}
+#Query AIMS thredds server via ExtractEReefsCRW.R and ExtractEReefsbackground.R
+# break up dataset for processing
+clipped<-read.csv("20240110clippedwrasters.csv")
+track<-clipped |> filter(data_type=="track")
+#write.csv(track, "20240110trackwrasters.csv")
+crw<-clipped |> filter(data_type=="crw")
+#write.csv(crw, "20240110crwwrasters.csv")
+background<-clipped |> filter(data_type=="background")
+#write.csv(background, "20240110backgroundwrasters.csv")
+```
+
+Gluing the outputs of the eReefs query scripts back together:
+```{r}
+# hyd4<-read.csv("hydro_4dimscrw.csv")
+# hyd3<-read.csv("hydro_3dimscrw.csv")
+# bgc4<-read.csv("bgc_4dimscrw.csv")
+# bgc3<-read.csv("bgc_3dimscrw.csv")
+# 
+# 
+# # arrange dfs by index
+# hyd4test<-hyd4%>%arrange(X.3)
+
+# # add in hyd3dims vars
+# 
+# hyd3vars<-hyd3%>%arrange(X.3)
+# hydtest<-cbind(hyd4test, hyd3vars[, c("mean_wspeed")])
+# 
+# # add in bgc vars
+# bgc4vars<-bgc4%>%arrange(X.3)
+# bgc3vars<-bgc3%>%arrange(X.3)
+# bgc4test<-cbind(hydtest, bgc4vars[, c("ZooL_N", "EFI")])
+# bgc3test<-cbind(bgc4test, bgc3vars[, c("Secchi")])
+# bgc3test<-bgc3test%>%rename("mean_wspeed"=`hyd3vars[, c("mean_wspeed")]`, 
+#                             "Secchi"=`bgc3vars[, c("Secchi")]`)
+# # save this 
+# write.csv(bgc3test, "20240304crw.csv")
+# Clipped to seagrass raster data- resulting in:
+# crw<-read.csv("20240304crwwrug.csv")
+```
+
+
+##########################################
+
+# For grid prediction:
+## Convert polygon layers to rasters
+```{r}
+COMMUNITY<-terra::vect("enviro datasets/NESP predicted distribution of seagrass communities/Shapefiles/GBR_NESP-TWQ-5.4_JCU_Seagrass-communities_20201203.shp")
+COMMUNITY$COMMUNITY<-as.factor(COMMUNITY$COMMUNITY)
+y=terra::rast(COMMUNITY, resolution=common_res, extent=common_extent, crs=common_crs)
+seagrassCom<-terra::rasterize(COMMUNITY, y, field='COMMUNITY')
+seagrasscrop <- crop(seagrassCom, extent(extent))
+plot(seagrasscrop)
+ra<-aggregate(seagrasscrop, fact=2)
+raster::writeRaster(ra, "COMMUNITY.asc")
+
+builtfeature<-terra::vect("enviro datasets/Breakwaters, groynes, seawalls, marinas/QSC_Extracted_Data_20231018_085138072000-40848/data.gdb")
+builtfeature$FEATURETYPE<-as.factor(builtfeature$FEATURETYPE)
+y=terra::rast(builtfeature, resolution=common_res, extent=common_extent, crs=common_crs)
+builtfeature<-terra::rasterize(builtfeature, y, field='FEATURETYPE')
+builtfeatcrop <- crop(builtfeature, extent(extent))
+plot(builtfeatcrop)
+ra<-aggregate(builtfeatcrop, fact=2)
+raster::writeRaster(ra, "builtfeature.asc")
+
+
+geohab<-terra::vect("enviro datasets/qld_geohab_av/czm/pristine_ests/release/qld/shape/geohab_qld_v2.shp")
+geohab$GH_TYPE<-as.factor(geohab$GH_TYPE)
+y=terra::rast(geohab, resolution=common_res, extent=common_extent, crs=common_crs)
+geohab<-terra::rasterize(geohab, y, field='GH_TYPE')
+geohabcrop <- crop(geohab, extent(extent))
+plot(geohabcrop)
+ra<-aggregate(geohabcrop, fact=2)
+raster::writeRaster(ra, "geohab.asc")
+
+marina<-terra::vect("enviro datasets/Breakwaters, groynes, seawalls, marinas/QSC_Extracted_Data_20231018_085120960000-49924/data.gdb")
+marina$FEATURETYPE<-as.factor(marina$FEATURETYPE)
+y=terra::rast(marina, resolution=common_res, extent=common_extent, crs=common_crs)
+marina<-terra::rasterize(marina, y, field='FEATURETYPE')
+marinacrop <- crop(marina, extent(extent))
+plot(marinacrop)
+ra<-aggregate(marinacrop, fact=2)
+raster::writeRaster(ra, "marina.asc")
+
+recboating<-terra::vect("enviro datasets/rec_boating_buffered.shp")
+recboating$FACILITY<-as.factor(recboating$FACILITY)
+y=terra::rast(recboating, resolution=common_res, extent=common_extent, crs=common_crs)
+recboating<-terra::rasterize(recboating, y, field='FACILITY')
+recboatingcrop <- crop(recboating, extent(extent))
+plot(recboatingcrop)
+ra<-aggregate(recboatingcrop, fact=2)
+raster::writeRaster(ra, "recboating.asc")
+
+geomorph<-terra::vect("enviro datasets/Heap2008Geomorphology.shp")
+geomorph$feature<-as.factor(geomorph$feature)
+y=terra::rast(geomorph, resolution=common_res, extent=common_extent, crs=common_crs)
+geomorph<-terra::rasterize(geomorph, y, field='feature')
+geomorphcrop <- crop(geomorph, extent(extent))
+plot(geomorphcrop)
+ra<-aggregate(geomorphcrop, fact=2)
+raster::writeRaster(ra, "geomorph.asc")
+
+```
+## real time ereefs layers as rasters
+```{r}
+nc_file <- "enviro datasets/ascii rasters for predictions/gbr4_simple_2023-10-19.nc"
+nc_file_bgc <- "enviro datasets/ascii rasters for predictions/gbr4_bgc_simple_2023-10-19.nc"
+```
+```{r}
+variables_hydro <- c("temp", "salt", "v", "u", "mean_cur", "mean_wspeed", "wspeed_u", "wspeed_v")  # List your variables here
+variables_bgc <-c("Secchi", "EFI", "ZooL_N")
+```
+```{r}
+raster_layer <- raster(nc_file, varname = 'wspeed_u')
+nc_data<-nc_open(nc_file)
+var_data <- ncvar_get(nc_data, variables_hydro[1])
+var_data_permuted <- aperm(var_data, c(1:(dim(var_data)-2), dim(var_data)[2], dim(var_data)[1]))
+plot(raster_layer)
+```
+
+```{r}
+for (var in variables_hydro) {
+  # Read the NetCDF variable as a raster
+  r <- raster(nc_file, varname = var)
+  
+  # (Optional) Re-grid - create a target raster for desired resolution and extent
+  target_raster <- raster(extent(r), res=common_res)
+  r_resampled <- resample(r, target_raster, method="bilinear")
+  
+  # Clip to the shapefile
+  r_clipped <- mask(r_resampled, shp)
+  
+  # Set CRS
+  crs(r_clipped) <- CRS(common_crs)
+  
+  # Save as ASCII raster
+  ascii_filename <- paste0(var, "2023.asc")  # Construct filename
+  writeRaster(r_clipped, ascii_filename, format="ascii")
+}
+```

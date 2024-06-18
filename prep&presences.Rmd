@@ -1,0 +1,295 @@
+---
+title: "presence and pseudo-absence setup"
+output: html_document
+date: "2023-08-16"
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r libraries}
+library(stars)
+library(readr)
+library(SDLfilter)
+library(raster)
+library(lubridate)
+library(adehabitatLT)
+library(momentuHMM)
+library(rjags)
+library(bsam)
+require(tidyverse)
+## install aniMotum dev branch (do first time only)
+# remotes::install_github("ianjonsen/aniMotum@dev")
+require(aniMotum)
+library(move)
+library(ctmm)
+library(adehabitatLT)
+require(patchwork)
+library(raster)
+library(sp)
+```
+
+# Data pre-processing
+
+## Raw data
+"20230818rawFGPS&ARGOS.csv contains raw data for Port Curtis and "Raine_ShoalwaterFGPSARGOS.raw.csv" for Raine and Shoalwater. 
+```{r}
+PC<-read.csv("20230818rawFGPS&ARGOS.csv")
+SG_RI<-read.csv("R_SBrawFGPS_ARGOS.csv")%>%filter(lc%in%c(1,2,3,"G"))
+```
+
+
+Pre-processing steps:
+1. Raine foraging periods were visually separated from post-nesting in QGIS. Removed non-foraging periods.
+2. Combined data for PC, SB and RI
+2. Removed everything before release time for Port Curtis or first 24 hours for Shoalwater Bay
+3. Removed any duplicates or empty rows
+
+
+Removed non-foraging periods from Shoalwater tag 48861
+```{r}
+SG_RI<-SG_RI |> filter(!(id=="48861"& DateTime<as.POSIXct("30/01/2016",format="%d/%m/%Y")))
+```
+
+
+Combine sites
+```{r}
+common_cols <- intersect(colnames(PC), colnames(SG_RI))
+combined<-rbind(
+  subset(PC, select = common_cols),
+  subset(SG_RI, select = common_cols)
+)
+#write.csv(combined, file="R-Sh-G-FGPSARGOS.raw.csv")
+```
+
+
+Pre-filtering improved model fits:
+SDLfilter
+```{r}
+# data-driven filter
+combined<-combined%>%mutate(Type=ifelse(lc=="G", "FGPS", "ARGOS"))%>%
+  mutate(DateTime=as.POSIXct(DateTime, format='%Y-%m-%d %H:%M:%S', tz="GMT"))%>%
+  group_by(id)%>%arrange(DateTime) # Make sure data are ordered by timestamp
+GPS<-combined%>%filter(Type=="FGPS")%>%ungroup()
+ARGOS<-combined%>%filter(Type=="ARGOS")%>%ungroup()
+
+GPS<-as.data.frame(GPS)
+ARGOS<-as.data.frame(ARGOS)
+
+
+dd.GPS<-ddfilter(GPS, vmax=9.9, qi=4, ia=90, vmaxlp=2.0)
+dd.ARGOS<-ddfilter(ARGOS, vmax=9.9, qi=1, ia=90, vmaxlp=2.0)
+
+
+dd.data<-rbind(dd.GPS, dd.ARGOS)
+
+#write.csv(dd.data, file="20230818filteredFGPS&ARGOS.csv")
+```
+Remove points on land
+```{r}
+# Load the Intertidal Extents Model Relative Extents Model (Geoscience Australia)
+# https://ecat.ga.gov.au/geonetwork/srv/api/records/7d6f3432-5f93-45ee-8d6c-14b26740048a
+
+raster_data <- raster("enviro datasets/100482_RelativeExtentsLayer/ITEM_REL_mosaic_1987_2015.tif")
+
+# Load the point data
+LatLon <- data.frame(y=dd.data$lat, x=dd.data$lon)
+coordinates(LatLon) <- ~x+y
+mypoints = SpatialPoints(LatLon, proj4string = CRS("+init=epsg:4326"))
+
+
+# Extract the raster values at the locations of the points
+myvalues = raster::extract(raster_data, mypoints)
+all<-cbind(dd.data, myvalues)
+
+# Select the points with values less than 9
+filtered_point_data <- all |> filter(myvalues<9)
+# STOPPED HERE and examined in GIS
+
+
+#write.csv(filtered_point_data, file="20231116filteredFGPS&ARGOS.csv")
+```
+
+
+```{r}
+# if previous timestamp is more than 3 days previous, assign a new id
+Filtered_3day<-filtered_point_data%>%
+  arrange(DateTime)%>%filter(!is.na(DateTime))%>%
+  group_by(id1)%>%
+  mutate(timediff=DateTime-lag(DateTime), # timediff is na for the first interval of each id
+         id_3daygaps=ifelse(is.na(timediff), 0, ifelse(timediff>259200, 1, 0)), 
+         cumsum=cumsum(id_3daygaps), #3 day splits
+         id_split=paste(id1, cumsum, sep="_")) 
+
+
+# retain only tracks with at least 20 locations
+Filtered20plus<-Filtered_3day%>%group_by(id_split)%>%filter(n()>=20) |> droplevels()
+```
+
+
+# State space models
+see https://esajournals.onlinelibrary.wiley.com/doi/full/10.1002/ecm.1470 
+State space models and flexible hierachical models- observations are imperfect measures of temporally evolving hidden states. Can be linear or non-linear and use a variety of statistical distributions. 
+Assumptions:
+1. state time series evolves as a Markov process (i.e. the state at time t, depends only on the state at the previous step t-1). 
+2. observations are independent of one another once we account for dependence on the states i.e. any dependence between observations is the result of dependence between hidden states. 
+
+
+# Fit SSM with Animotum
+
+Animotum assumes GPS data are truth - but we used user-supplied uncertainty as estimated per # satellites:
+Dujon, A.M., Lindstrom, R.T. and Hays, G.C. (2014), The accuracy of Fastloc-GPS locations and implications for animal tracking. Methods Ecol Evol, 5: 1162-1169. https://doi.org/10.1111/2041-210X.12286
+```{r}
+## read data, set GPS (G) to Generic Locations (GL) i.e. specifying user-supplied uncertainty 
+Locs <- Filtered20plus |> ungroup() |> 
+  #dplyr::select(-1) |>
+  #mutate(lc = ifelse(lc == "G", "GL", lc)) |>
+  dplyr::filter(!is.na(DateTime)) ##  Remove records with NA DateTime
+```
+
+```{r}
+## set up table of standard deviations by # Sats - this assumes the errors are symmetric. 
+GPSerr.df <- tibble(qi = 4:11, 
+                        x.sd = c(937.02, 
+                                 630.75, 
+                                 421.24, 
+                                 384.67, 
+                                 159.14, 
+                                 13.19, 
+                                 12.45, 
+                                 10.67),
+                        y.sd = x.sd)
+```
+```{r}
+## merge SD's with location data
+tmp <- left_join(Locs, GPSerr.df, by = "qi") |> dplyr::select(!c(id, id1))
+
+ids<-unique(tmp$id_split)
+
+## use aniMotum::format_data to simplify set up for fitting SSM
+d <- format_data(tmp, id="id_split", date = "DateTime", coord = c("lon","lat"))
+```
+
+The below was scripted to run all individuals in the dataset as a loop. The code below attempts to find the optimal time-step for each individual's track.
+However, the final outputs we generated by running each individual manually. This allowed us to specify the time_step as appropriate, and to visually examine the diagnostic plots one at a time.
+```{r}
+## fit SSM using loop
+results <- list() # empty list
+
+for (i in c(1)) { #length(ids))
+thisturt<-d[d$id%in%ids[i],]
+thisName <- unique(thisturt$id)#taking name from the dataframe
+  cat("doing", thisName, "\n")
+  
+   # Try different time steps
+  best_result <- NULL
+  for (time_step in c(4,6,12,24,48,72)) {
+    # Fit the SSM
+    try({
+    result <- aniMotum::fit_ssm(thisturt, vmax = 3, model = "mp", time.step = time_step, map = list(rho_o = factor(NA)))
+})
+    # Check if fitting was successful
+    if (!(result$converged=="FALSE"|result$pdHess=="FALSE")) {
+      best_result <- result
+      break
+    }
+  }
+  # Handle the case where no suitable time step was found
+  if (is.null(best_result)) {
+    message("No suitable time step found for ID:", id)
+  }
+  # Store the best result
+  results[[i]] <- best_result
+}
+
+
+# save result
+saveRDS(results, "20231116fit_ssm_outputALL.Rdata")
+```
+
+Plot of movement persistence over time and map 
+```{r}
+for (i in 1:length(results)) {
+  result <- results[[i]]
+thisName <- unique(result$id)#taking name from the dataframe
+  cat("doing", thisName, "\n")
+  # Check if the result is valid
+  if (!result$converged=="FALSE") {
+    # Generate the persistence estimates timeseries plot
+    plot(result, type = 3, pages = 1, ncol = 2)+
+    plot(result, what = "predicted", type = 4, pages = 0)
+    file.plot <- paste0("ssm_plots/", result$id, ".png")
+    ggsave(file = file.plot)
+  }
+}
+```
+
+
+```{r}
+plot(results[[1]], type = 3, pages = 1, ncol = 2) # persistence estimates as a timeseries, 4 is track plot with locations coloured by persistence
+
+plot(results[[1]], what="predicted", type = 4, pages = 0) # plot 2-d tracks of individuals
+
+plot(results[[1]], what="predicted", type = 1, pages = 1) # orange ribbon is 2xSE interval. type 2 (2-d timeseries plot of the track) doesn't work when there are NAs
+
+# predicted values are state estimates at regular time intervals, orange ellipses are 95% confidence around predicted values. 
+
+map(results[[1]],
+    pages=1,
+    what = "p", normalise=T)
+
+# behavioural estimation
+# plot movement persistence along the track of each animal as timeseries
+p1 <- plot(results[[1]],
+           type = 3,
+           pages = 1,
+           ncol = 2,
+           normalise = TRUE,
+           group = TRUE,
+           pal = "Plasma") &
+  ylim(0, 1) &
+  theme(legend.position = "none",
+        axis.text = element_text(size = 7))
+p1
+```
+
+SSM validation
+```{r}
+plot(results[[1]], what='fitted') #fitted and predicted (gold) locations as 1-d timeseries over obs (blue), black x means failed to pass prefilter prior to fitting. larger errors (gold bands =2SE) occur in data gaps
+plot(results[[1]], "p", type=2, alpha=0.1) # the above viewed as 2-d tracks
+
+
+# checking whether items in the results list converged
+for (i in 1:length(results)) {
+  result <- results[[i]]
+thisName <- unique(result$id) #taking name from the dataframe
+  cat("doing", thisName, "\n")
+  
+
+  # Check if the result is valid by saving residual plots
+  if (!result$converged=="FALSE") {
+    res.rw <- osar(result)
+    plot(res.rw, type = "ts") | plot(res.rw, type = "qq")+
+    plot(res.rw, type = "acf") | plot_spacer()
+    file.plot <- paste0("residual_plots/", result$id, "-residual-plots.png")
+    ggsave(file = file.plot)
+  }
+}
+```
+
+Diagnostics are one-step ahead prediction residual, displayed as a) time-series, b)qq-plot and c)autocorrelation functions. 
+a) should show no pattern in the residuals
+b) should show normality
+c) shouldn't show autocorrelation
+We can also compare AICc statistics of various models. However, AIC can be misleading for timeseries models and shouldn't be used as the sole criteria. 
+```{r}
+#res.rw$ssm[[1]]$AICc
+```
+
+
+To deal with poor fit, attempt a different kind of model (e.g. crw instead of rw)
+
+

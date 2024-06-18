@@ -4,7 +4,7 @@ format: html
 editor: visual
 ---
 
-# Foraging habitat for green turtles in the Great Barrier Reef: characterisation, spatial distribution & temporal trend 
+# A dynamic foraging habitat distribution estimate for green turtles in the Great Barrier Reef
 
 ## Usage Instructions
 
@@ -19,122 +19,92 @@ The scripts should be run in this order:
 
 ## R software information
 
-> sessionInfo()
-R version 4.3.1 (2023-06-16 ucrt)
-Platform: x86_64-w64-mingw32/x64 (64-bit)
-Running under: Windows 11 x64 (build 22621)
+> sessionInfo() R version 4.3.1 (2023-06-16 ucrt) Platform: x86_64-w64-mingw32/x64 (64-bit) Running under: Windows 11 x64 (build 22621)
 
 Matrix products: default
 
+locale: \[1\] LC_COLLATE=English_Australia.utf8 LC_CTYPE=English_Australia.utf8 LC_MONETARY=English_Australia.utf8 LC_NUMERIC=C\
+\[5\] LC_TIME=English_Australia.utf8
 
-locale:
-[1] LC_COLLATE=English_Australia.utf8  LC_CTYPE=English_Australia.utf8    LC_MONETARY=English_Australia.utf8 LC_NUMERIC=C                      
-[5] LC_TIME=English_Australia.utf8    
+time zone: Australia/Brisbane tzcode source: internal
 
-time zone: Australia/Brisbane
-tzcode source: internal
+attached base packages: \[1\] stats graphics grDevices utils datasets methods base
 
-attached base packages:
-[1] stats     graphics  grDevices utils     datasets  methods   base     
-
-loaded via a namespace (and not attached):
- [1] gtable_0.3.4      dplyr_1.1.2       compiler_4.3.1    visdat_0.6.0      tidyselect_1.2.0  Rcpp_1.0.11       spatialEco_2.0-2  scales_1.2.1     
- [9] yaml_2.3.7        fastmap_1.1.1     lattice_0.21-8    ggplot2_3.4.3     R6_2.5.1          generics_0.1.3    pdp_0.8.1         knitr_1.43       
-[17] iterators_1.0.14  tibble_3.2.1      munsell_0.5.0     pillar_1.9.0      rlang_1.1.1       utf8_1.2.3        sp_2.0-0          terra_1.7-39     
-[25] xfun_0.40         cli_3.6.1         magrittr_2.0.3    digest_0.6.33     foreach_1.5.2     grid_4.3.1        rstudioapi_0.15.0 lifecycle_1.0.4  
-[33] vctrs_0.6.3       evaluate_0.23     glue_1.6.2        raster_3.6-23     codetools_0.2-19  fansi_1.0.4       colorspace_2.1-0  rmarkdown_2.24   
-[41] tools_4.3.1       pkgconfig_2.0.3   htmltools_0.5.6  
-
-
+loaded via a namespace (and not attached): \[1\] gtable_0.3.4 dplyr_1.1.2 compiler_4.3.1 visdat_0.6.0 tidyselect_1.2.0 Rcpp_1.0.11 spatialEco_2.0-2 scales_1.2.1\
+\[9\] yaml_2.3.7 fastmap_1.1.1 lattice_0.21-8 ggplot2_3.4.3 R6_2.5.1 generics_0.1.3 pdp_0.8.1 knitr_1.43\
+\[17\] iterators_1.0.14 tibble_3.2.1 munsell_0.5.0 pillar_1.9.0 rlang_1.1.1 utf8_1.2.3 sp_2.0-0 terra_1.7-39\
+\[25\] xfun_0.40 cli_3.6.1 magrittr_2.0.3 digest_0.6.33 foreach_1.5.2 grid_4.3.1 rstudioapi_0.15.0 lifecycle_1.0.4\
+\[33\] vctrs_0.6.3 evaluate_0.23 glue_1.6.2 raster_3.6-23 codetools_0.2-19 fansi_1.0.4 colorspace_2.1-0 rmarkdown_2.24\
+\[41\] tools_4.3.1 pkgconfig_2.0.3 htmltools_0.5.6
 
 ## Data Description
 
 **Primary data** -- for habitat model runs, contains turtle presences and pseudoabsences, with timestamps and appended (as per Table 1 of manuscript) values of environmental covariates
 
-
-Presences: 20240212_track.csv
-Background pseudo-absences: 20240222backgrounddata_clipped.csv
-Correlated random walk pseudo-absences: 20240309data.crw.csv
-
+Presences: 20240212_track.csv Background pseudo-absences: 20240222backgrounddata_clipped.csv Correlated random walk pseudo-absences: 20240309data.crw.csv
 
 ### Variable descriptions
 
-- id: unique turtle identifier
-- id1: a combination of the tracker ptt and the turtle's Primary flipper tag
-- lat: latitude
-- lon: longitude
-- data_type
-- date
-- aus.date
-- iteration
-- COMMUNITY
-- builtfeature
-- geohab
-- dist2recboatfeat
-- Dist2Rivers1
-- bathy1
-- dist2coast1_2
-- seagrassP1
-- tidalexposure1
-- mmpexposure1
-- mmpfrequency1
-- salt
-- temp
-- mean_cur
-- mean_wspeed
-- ZooL_N
-- EFI
-- Secchi
-- geomorph
-- deamangrove
+-   id: unique turtle identifier
+-   id1: a combination of the tracker ptt and the turtle's Primary flipper tag
+-   lat: latitude
+-   lon: longitude
+-   data_type
+-   date
+-   aus.date
+-   iteration
+-   COMMUNITY
+-   builtfeature
+-   geohab
+-   dist2recboatfeat
+-   Dist2Rivers1
+-   bathy1
+-   dist2coast1_2
+-   seagrassP1
+-   tidalexposure1
+-   mmpexposure1
+-   mmpfrequency1
+-   salt
+-   temp
+-   mean_cur
+-   mean_wspeed
+-   ZooL_N
+-   EFI
+-   Secchi
+-   geomorph
+-   deamangrove
 
-
-Raw data included the additional fields: 
-- qi: quality index= number of source satellites for FGPS
-- DateTime: time stamp in GMT, format YYYY-mm-dd HH:MM:SS
-- Type: ARGOS or FGPS
-- sex: turtle sex
-- ccl: curved carapace length
-- age.class: maturity status determined by laparoscopy
-- lc: ARGOS location class, set to G for FGPS. The data contain ARGOS location classes 1,2,3 only. 
-
+Raw data included the additional fields: - qi: quality index= number of source satellites for FGPS - DateTime: time stamp in GMT, format YYYY-mm-dd HH:MM:SS - Type: ARGOS or FGPS - sex: turtle sex - ccl: curved carapace length - age.class: maturity status determined by laparoscopy - lc: ARGOS location class, set to G for FGPS. The data contain ARGOS location classes 1,2,3 only.
 
 **Secondary data** - "rasters for grid predictions". Excludes MMP grids (exposure and frequency).
 
-CRS - Australian Albers GDA93
-grid size - 500m 
-origin - 
+CRS - Australian Albers GDA93 grid size - 500m origin -
 
-bathy.tif          
-builtfeat500.tif  
-COMMUNITY500.tif
-dist2coast.tif     
-dist2recboats.tif 
-dist2reefs.tif    
-dist2rivers.tif    
-EFI2010.tif       
-EFI2022.tif        
-geohab500.tif     
-geomorph500.tif  
-mangroves2010.tif 
-mangroves2022.tif  
-mask.tif       
-mean_cur2010.tif   
-mean_cur2022.tif   
-mean_wspeed2010.tif
-mean_wspeed2022.tif
-mmpexposure.tif    
-mmpfrequency.tif  
-ruggedness.tif   
-salt2010.tif      
-salt2022.tif     
-seagrassp.tif      
-Secchi2010.tif     
-Secchi2022.tif     
-slope.tif         
-temp2010.tif      
-temp2022.tif     
-tidalexposure.tif  
-wspeed2010.tif    
-ZooL_N2010.tif    
-ZooL_N2022.tif 
+bathy.tif\
+builtfeat500.tif\
+COMMUNITY500.tif dist2coast.tif\
+dist2recboats.tif dist2reefs.tif\
+dist2rivers.tif\
+EFI2010.tif\
+EFI2022.tif\
+geohab500.tif\
+geomorph500.tif\
+mangroves2010.tif mangroves2022.tif\
+mask.tif\
+mean_cur2010.tif\
+mean_cur2022.tif\
+mean_wspeed2010.tif mean_wspeed2022.tif mmpexposure.tif\
+mmpfrequency.tif\
+ruggedness.tif\
+salt2010.tif\
+salt2022.tif\
+seagrassp.tif\
+Secchi2010.tif\
+Secchi2022.tif\
+slope.tif\
+temp2010.tif\
+temp2022.tif\
+tidalexposure.tif\
+wspeed2010.tif\
+ZooL_N2010.tif\
+ZooL_N2022.tif

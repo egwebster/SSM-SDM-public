@@ -8,14 +8,14 @@ editor: visual
 
 ## Usage Instructions
 
-The scripts should be run in this order:
+The R scripts should be run in this order:
 
-1.  prep&presences.Rmd - data filtering and state-space modelling. calls LoadPackages_PA.R (adapted from Hazen et al.)
-2.  Pseudoabsences.R - generate pseudo-absences (background and correlated random walk). calls PseudoFunctionsHPC.R (adapted from Hazen et al.)
-3.  AppendtoEnviroData.Rmd - workflow for appending environmental covariates to presences and pseudo-absences (see Table 1 in manuscript). Some of these steps were done manually in QGIS. Some of these steps call custom scripts:
-4.  ExtractDEAMangroves.R - append yearly distance to mangroves to presences/pseudo-absences
-5.  ExtractEReefsCRW.R & ExtractEReefsbackground.R- append daily eReefs variables to presences/pseudo-absences
-6.  habitatmodel.Rmd - create BRT models, quantify relative importance of environmental covariates and generate partial plots and predict to GBR grid at 2 time points
+1.  **prep&presences.Rmd** data filtering and state-space modelling. Calls **LoadPackages_PA.R** (adapted from Hazen et al. 2021) & raw data (available upon reasonable request from Queensland Department of Environment, Science and Innovation's Threatened Species Unit).
+2.  **Pseudoabsences.R** generate pseudo-absences (background and correlated random walk). Calls **PseudoFunctionsHPC.R** (adapted from Hazen et al. 2021).
+3.  **AppendtoEnviroData.Rmd** workflow for appending environmental covariates to presences and pseudo-absences (see Table 1 in manuscript). Outlines steps performed manually in QGIS, and steps that call the following R scripts:
+    a)  **ExtractDEAMangroves.R** append yearly distance to mangroves to presences/pseudo-absences.
+    b)  **ExtractEReefsCRW.R** & **ExtractEReefsbackground.R** append daily eReefs variables to presences/pseudo-absences.
+4.  **habitatmodel.Rmd** create BRT models, quantify relative importance of environmental covariates, generate partial plots and predict to GBR grid at 2 time points.
 
 ## R software information
 
@@ -39,72 +39,98 @@ loaded via a namespace (and not attached): \[1\] gtable_0.3.4 dplyr_1.1.2 compil
 
 ## Data Description
 
-**Primary data** -- for habitat model runs, contains turtle presences and pseudoabsences, with timestamps and appended (as per Table 1 of manuscript) values of environmental covariates
+### Primary data
 
-Presences: 20240212_track.csv Background pseudo-absences: 20240222backgrounddata_clipped.csv Correlated random walk pseudo-absences: 20240309data.crw.csv
+Input for habitat model runs. Contains turtle presences (from state-space modelling) and pseudoabsences.
 
-### Variable descriptions
+Output from prep&presences.Rmd = "20231128fit_ssm_manualALL.Rdata"
 
--   id: unique turtle identifier
--   id1: a combination of the tracker ptt and the turtle's Primary flipper tag
--   lat: latitude
--   lon: longitude
--   data_type
--   date
--   aus.date
--   iteration
--   COMMUNITY
--   builtfeature
--   geohab
--   dist2recboatfeat
--   Dist2Rivers1
--   bathy1
--   dist2coast1_2
--   seagrassP1
--   tidalexposure1
--   mmpexposure1
--   mmpfrequency1
--   salt
--   temp
--   mean_cur
--   mean_wspeed
--   ZooL_N
--   EFI
--   Secchi
--   geomorph
--   deamangrove
+Outputs from Pseudoabsences.R & AppendtoEnviroData.Rmd=
 
-Raw data included the additional fields: - qi: quality index= number of source satellites for FGPS - DateTime: time stamp in GMT, format YYYY-mm-dd HH:MM:SS - Type: ARGOS or FGPS - sex: turtle sex - ccl: curved carapace length - age.class: maturity status determined by laparoscopy - lc: ARGOS location class, set to G for FGPS. The data contain ARGOS location classes 1,2,3 only.
+1.  "track.csv" = presences
+2.  "background.csv" = background pseudo-absences
+3.  "crw.csv" = correlated random walk pseudo-absences
 
-**Secondary data** - "rasters for grid predictions". Excludes MMP grids (exposure and frequency).
+#### Variable descriptions
 
-CRS - Australian Albers GDA93 grid size - 500m origin -
+-   id: Unique identifier for turtle tracks. Tracks with gaps of \>48 hours were considered independent. Independent tracks from a single turtle are numbered "\_0", "\_1" etc.
+-   converged: Whether ssm model converged
+-   pdHess: Whether the Hessian matrix was positive-definite and could be solved to obtain parameter standard errors
+-   pmodel: SSM model type; "mp" is movement persistence
+-   id1: A combination of the tracker number and the turtle's Primary flipper tag number
+-   lat: Latitude
+-   lon: Longitude
+-   data_type: 'track' = presence; 'background' or 'crw' = pseudo-absences
+-   date: Calendar date GMT
+-   aus.date: Calendar date AEST
+-   iteration: for pseudo-absences,
+-   COMMUNITY: Seagrass community type
+-   builtfeature: Within spatial buffer of 0.0014 decimal degrees of built feature
+-   geohab: Geomorphic habitats of Australia
+-   dist2recboatfeat: Distance to boat ramps
+-   Dist2Rivers1: Distance to rivers
+-   dist2reefs1: Distance to reefs
+-   bathy1: Bathymetry
+-   dist2coast1_2: Distance to coast
+-   seagrassP1: Seagrass probability
+-   tidalexposure1: Tidal exposure
+-   mmpexposure1: Longterm exposure to above guideline value concentrations of land-sourced pollutants: "Chronic floodwater exposure"
+-   mmpfrequency1: Longterm frequency of water types 1&2: "Acute flood frequency"
+-   salt: Salinity
+-   temp: Temperature
+-   mean_cur: Mean seawater velocity
+-   mean_wspeed: Mean wind speed
+-   ZooL_N: Large zooplankton nitrogen
+-   EFI: Ecology fine inorganics (i.e., sum of fine sediment and mud concentrations, derived as total suspended solids/1000)
+-   Secchi: Secchi depth
+-   geomorph: Geomorphology
+-   deamangrove: Distance to mangroves
+-   slope1: Slope
+-   ruggedness1: Ruggedness
 
-bathy.tif\
-builtfeat500.tif\
-COMMUNITY500.tif dist2coast.tif\
-dist2recboats.tif dist2reefs.tif\
-dist2rivers.tif\
-EFI2010.tif\
-EFI2022.tif\
-geohab500.tif\
-geomorph500.tif\
-mangroves2010.tif mangroves2022.tif\
-mask.tif\
-mean_cur2010.tif\
-mean_cur2022.tif\
-mean_wspeed2010.tif mean_wspeed2022.tif mmpexposure.tif\
-mmpfrequency.tif\
-ruggedness.tif\
-salt2010.tif\
-salt2022.tif\
-seagrassp.tif\
-Secchi2010.tif\
-Secchi2022.tif\
-slope.tif\
-temp2010.tif\
-temp2022.tif\
-tidalexposure.tif\
-wspeed2010.tif\
-ZooL_N2010.tif\
-ZooL_N2022.tif
+### Secondary data
+
+Input rasters for grid predictions as .tif files, excludes MMP grids (exposure and frequency, which are available upon reasonable request from JCU TropWATER).
+
+-   class : RasterLayer
+
+-   dimensions : 23531, 21698, 510575638 (nrow, ncol, ncell)
+
+-   resolution : 100, 100 (x, y)
+
+-   extent : 961853.5, 3131654, -3445441, -1092341 (xmin, xmax, ymin, ymax)
+
+-   crs : +proj=aea +lat_0=0 +lon_0=132 +lat_1=-18 +lat_2=-36 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs
+
+    -   bathy.tif - Bathymetry
+    -   builtfeat500.tif - Built features, resampled to 500m pixels
+    -   COMMUNITY500.tif - Seagrass community type, resampled to 500m pixels
+    -   dist2coast.tif - Distance to coast
+    -   dist2recboats.tif - Distance to boat ramps
+    -   dist2reefs.tif - Distance to reefs
+    -   dist2rivers.tif - Distance to rivers
+    -   EFI2010.tif - Ecology fine inorganics December 2010
+    -   EFI2022.tif - Ecology fine inorganics December 2022
+    -   geohab500.tif - Geomorphic habitats resampled to 500m pixels
+    -   geomorph500.tif - Geomorphology resampled to 500m pixels
+    -   mangroves2010.tif - Distance to mangroves 2010
+    -   mangroves2022.tif - Distance to mangroves 2022
+    -   mask.tif - Modelled extent
+    -   mean_cur2010.tif - Mean surface velocity December 2010
+    -   mean_cur2022.tif - Mean surface velocity December 2022
+    -   mean_wspeed2010.tif - Mean wind speed December 2010
+    -   mean_wspeed2022.tif  - Mean wind speed December 2022
+    -   mmpexposure.tif - Longterm exposure to above guideline value concentrations of land-sourced pollutants: "Chronic floodwater exposure" (data available upon reasonable request from JCU TropWATER)
+    -   mmpfrequency.tif - Longterm frequency of water types 1&2: "Acute flood frequency" (data available upon reasonable request from JCU TropWATER)
+    -   ruggedness.tif - Ruggedness
+    -   salt2010.tif - Salinity December 2010
+    -   salt2022.tif - Salinity December 2022
+    -   seagrassp.tif - Seagrass probability
+    -   Secchi2010.tif - Secchi depth December 2010
+    -   Secchi2022.tif - Secchi depth December 2022
+    -   slope.tif - Slope
+    -   temp2010.tif - Temperature December 2010
+    -   temp2022.tif - Temperature December 2022
+    -   tidalexposure.tif - Tidal Exposure
+    -   ZooL_N2010.tif - Large zooplankton Nitorogen December 2010
+    -   ZooL_N2022.tif - Large zooplankton Nitrogen December 2022

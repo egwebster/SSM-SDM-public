@@ -30,7 +30,7 @@ FGPS.stay<- tags%>% filter(!g>0.8) |>
   
 FGPS.stay |>   ggplot(aes(x=x, y=y))+
   geom_point()
-
+write.csv(FGPS.stay, file="20231129SSMoutput.csv")
 
 tags<-FGPS.stay
 #tags$date <- paste(gsub(" ","",paste(tags$Month,tags$Day,tags$Year,sep="/"), fixed=TRUE), " 12:00:00 GMT")

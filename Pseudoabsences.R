@@ -5,7 +5,7 @@ out.dir='output.Predicted/'
 in.csv='tags.csv'
 
 # read in tag data
-results<-readRDS("PA_paper/20231128fit_ssm_manualALL.Rdata")
+results<-readRDS("20231128fit_ssm_manualALL.Rdata")
 filtered_results <- list()
 for (i in 1:length(results)) {
   result <- results[[i]]
@@ -31,7 +31,7 @@ FGPS.stay<- tags%>% filter(!g>0.8) |>
 FGPS.stay |>   ggplot(aes(x=x, y=y))+
   geom_point()
 
-write.csv(FGPS.stay, "20231129SSMoutput.csv")
+
 tags<-FGPS.stay
 #tags$date <- paste(gsub(" ","",paste(tags$Month,tags$Day,tags$Year,sep="/"), fixed=TRUE), " 12:00:00 GMT")
 tags$dTime = as.POSIXct(strptime(as.character(tags$date), "%Y-%m-%d %H:%M", tz="GMT"))

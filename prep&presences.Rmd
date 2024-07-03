@@ -4,6 +4,8 @@ output: html_document
 date: "2023-08-16"
 editor_options: 
   chunk_output_type: console
+  markdown: 
+    wrap: 72
 ---
 
 ```{r setup, include=FALSE}
@@ -35,39 +37,37 @@ library(sp)
 # Data pre-processing
 
 ## Raw data
-"20230818rawFGPS&ARGOS.csv contains raw data for Port Curtis and "Raine_ShoalwaterFGPSARGOS.raw.csv" for Raine and Shoalwater. 
-```{r}
-PC<-read.csv("20230818rawFGPS&ARGOS.csv")
-SG_RI<-read.csv("R_SBrawFGPS_ARGOS.csv")%>%filter(lc%in%c(1,2,3,"G"))
-```
 
+Raw tracking data for Port Curtis (PC), Shoalwater Bay (SB) and Raine
+Island (RI) are available upon reasonable request from the Queensland
+Department of Environment, Science and Innovation
+([Threatened.Species\@des.qld.gov.au](mailto:Threatened.Species@des.qld.gov.au){.email})
+
+### Variable description
+
+-   id: Unique identifier for turtle
+-   qi: Quality index= number of source satellites for FGPS
+-   DateTime: Time stamp in GMT, format YYYY-mm-dd HH:MM:SS
+-   Type: ARGOS or FGPS
+-   sex: Turtle sex
+-   ccl: Curved carapace length
+-   age.class: Maturity status determined by laparoscopy
+-   lc: ARGOS location class, set to G for FGPS. The data contain ARGOS
+    location classes 1,2,3 only.
+-   lat: Latitude
+-   lon: Longitude
 
 Pre-processing steps:
-1. Raine foraging periods were visually separated from post-nesting in QGIS. Removed non-foraging periods.
-2. Combined data for PC, SB and RI
-2. Removed everything before release time for Port Curtis or first 24 hours for Shoalwater Bay
-3. Removed any duplicates or empty rows
 
+1.  RI foraging periods were visually separated from post-nesting in
+    QGIS. Removed non-foraging periods from SI and PC tracks.
+2.  Removed everything before release time for PC or first 24 hours for
+    SB
+3.  Removed any duplicates or empty rows
+4.  Combined data for PC, SB and RI = "combined"
 
-Removed non-foraging periods from Shoalwater tag 48861
-```{r}
-SG_RI<-SG_RI |> filter(!(id=="48861"& DateTime<as.POSIXct("30/01/2016",format="%d/%m/%Y")))
-```
+Pre-filtering using SDLfilter improved habitat model fits:
 
-
-Combine sites
-```{r}
-common_cols <- intersect(colnames(PC), colnames(SG_RI))
-combined<-rbind(
-  subset(PC, select = common_cols),
-  subset(SG_RI, select = common_cols)
-)
-#write.csv(combined, file="R-Sh-G-FGPSARGOS.raw.csv")
-```
-
-
-Pre-filtering improved model fits:
-SDLfilter
 ```{r}
 # data-driven filter
 combined<-combined%>%mutate(Type=ifelse(lc=="G", "FGPS", "ARGOS"))%>%
@@ -85,10 +85,10 @@ dd.ARGOS<-ddfilter(ARGOS, vmax=9.9, qi=1, ia=90, vmaxlp=2.0)
 
 
 dd.data<-rbind(dd.GPS, dd.ARGOS)
-
-#write.csv(dd.data, file="20230818filteredFGPS&ARGOS.csv")
 ```
+
 Remove points on land
+
 ```{r}
 # Load the Intertidal Extents Model Relative Extents Model (Geoscience Australia)
 # https://ecat.ga.gov.au/geonetwork/srv/api/records/7d6f3432-5f93-45ee-8d6c-14b26740048a
@@ -105,14 +105,12 @@ mypoints = SpatialPoints(LatLon, proj4string = CRS("+init=epsg:4326"))
 myvalues = raster::extract(raster_data, mypoints)
 all<-cbind(dd.data, myvalues)
 
-# Select the points with values less than 9
+# Select the points with values less than 9 (land)
 filtered_point_data <- all |> filter(myvalues<9)
-# STOPPED HERE and examined in GIS
 
-
-#write.csv(filtered_point_data, file="20231116filteredFGPS&ARGOS.csv")
 ```
 
+Separating tracks with gaps of more than 3 days
 
 ```{r}
 # if previous timestamp is more than 3 days previous, assign a new id
@@ -129,19 +127,27 @@ Filtered_3day<-filtered_point_data%>%
 Filtered20plus<-Filtered_3day%>%group_by(id_split)%>%filter(n()>=20) |> droplevels()
 ```
 
-
 # State space models
-see https://esajournals.onlinelibrary.wiley.com/doi/full/10.1002/ecm.1470 
-State space models and flexible hierachical models- observations are imperfect measures of temporally evolving hidden states. Can be linear or non-linear and use a variety of statistical distributions. 
-Assumptions:
-1. state time series evolves as a Markov process (i.e. the state at time t, depends only on the state at the previous step t-1). 
-2. observations are independent of one another once we account for dependence on the states i.e. any dependence between observations is the result of dependence between hidden states. 
 
+see
+<https://esajournals.onlinelibrary.wiley.com/doi/full/10.1002/ecm.1470>
+State space models and flexible hierachical models- observations are
+imperfect measures of temporally evolving hidden states. Can be linear
+or non-linear and use a variety of statistical distributions.
+Assumptions: 1. state time series evolves as a Markov process (i.e. the
+state at time t, depends only on the state at the previous step t-1). 2.
+observations are independent of one another once we account for
+dependence on the states i.e. any dependence between observations is the
+result of dependence between hidden states.
 
 # Fit SSM with Animotum
 
-Animotum assumes GPS data are truth - but we used user-supplied uncertainty as estimated per # satellites:
-Dujon, A.M., Lindstrom, R.T. and Hays, G.C. (2014), The accuracy of Fastloc-GPS locations and implications for animal tracking. Methods Ecol Evol, 5: 1162-1169. https://doi.org/10.1111/2041-210X.12286
+Animotum assumes GPS data are truth - but we used user-supplied
+uncertainty as estimated per \# satellites: Dujon, A.M., Lindstrom, R.T.
+and Hays, G.C. (2014), The accuracy of Fastloc-GPS locations and
+implications for animal tracking. Methods Ecol Evol, 5: 1162-1169.
+<https://doi.org/10.1111/2041-210X.12286>
+
 ```{r}
 ## read data, set GPS (G) to Generic Locations (GL) i.e. specifying user-supplied uncertainty 
 Locs <- Filtered20plus |> ungroup() |> 
@@ -163,6 +169,7 @@ GPSerr.df <- tibble(qi = 4:11,
                                  10.67),
                         y.sd = x.sd)
 ```
+
 ```{r}
 ## merge SD's with location data
 tmp <- left_join(Locs, GPSerr.df, by = "qi") |> dplyr::select(!c(id, id1))
@@ -173,8 +180,12 @@ ids<-unique(tmp$id_split)
 d <- format_data(tmp, id="id_split", date = "DateTime", coord = c("lon","lat"))
 ```
 
-The below was scripted to run all individuals in the dataset as a loop. The code below attempts to find the optimal time-step for each individual's track.
-However, the final outputs we generated by running each individual manually. This allowed us to specify the time_step as appropriate, and to visually examine the diagnostic plots one at a time.
+The below was scripted to run all individuals in the dataset as a loop.
+The code below attempts to find the optimal time-step for each
+individual's track. However, the final outputs we generated by running
+each individual manually. This allowed us to specify the time_step as
+appropriate, and to visually examine the diagnostic plots one at a time.
+
 ```{r}
 ## fit SSM using loop
 results <- list() # empty list
@@ -210,7 +221,8 @@ thisName <- unique(thisturt$id)#taking name from the dataframe
 saveRDS(results, "20231116fit_ssm_outputALL.Rdata")
 ```
 
-Plot of movement persistence over time and map 
+Plot of movement persistence over time and map
+
 ```{r}
 for (i in 1:length(results)) {
   result <- results[[i]]
@@ -226,7 +238,6 @@ thisName <- unique(result$id)#taking name from the dataframe
   }
 }
 ```
-
 
 ```{r}
 plot(results[[1]], type = 3, pages = 1, ncol = 2) # persistence estimates as a timeseries, 4 is track plot with locations coloured by persistence
@@ -257,6 +268,7 @@ p1
 ```
 
 SSM validation
+
 ```{r}
 plot(results[[1]], what='fitted') #fitted and predicted (gold) locations as 1-d timeseries over obs (blue), black x means failed to pass prefilter prior to fitting. larger errors (gold bands =2SE) occur in data gaps
 plot(results[[1]], "p", type=2, alpha=0.1) # the above viewed as 2-d tracks
@@ -280,16 +292,20 @@ thisName <- unique(result$id) #taking name from the dataframe
 }
 ```
 
-Diagnostics are one-step ahead prediction residual, displayed as a) time-series, b)qq-plot and c)autocorrelation functions. 
-a) should show no pattern in the residuals
-b) should show normality
-c) shouldn't show autocorrelation
-We can also compare AICc statistics of various models. However, AIC can be misleading for timeseries models and shouldn't be used as the sole criteria. 
+Diagnostics are one-step ahead prediction residual, displayed as a)
+time-series, b)qq-plot and c)autocorrelation functions.
+
+a)  should show no pattern in the residuals
+b)  should show normality
+c)  shouldn't show autocorrelation.
+
+We can also compare AICc statistics of various models. However, AIC can
+be misleading for timeseries models and shouldn't be used as the sole
+criteria.
+
 ```{r}
 #res.rw$ssm[[1]]$AICc
 ```
 
-
-To deal with poor fit, attempt a different kind of model (e.g. crw instead of rw)
-
-
+To deal with poor fit, can attempt a different kind of model (e.g. crw
+instead of rw).

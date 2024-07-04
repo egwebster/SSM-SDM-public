@@ -9,17 +9,19 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 load libraries
+
 ```{r}
-source("PA-paper/LoadPackages_PA.R")
+source("LoadPackages_PA.R")
 library(sf)
 ```
 
 bring in and format presences and pseudo-absences
+
 ```{r}
 presence<-read.csv("20231129SSMoutput.csv")
 
 # List all files in the directory
-files <- list.files("PA-paper/output.Predicted")
+files <- list.files("output.Predicted")
 csv_files <- files[grepl("\\.csv$", files)]
 
 # Initialize an empty data frames
@@ -59,13 +61,15 @@ for (file in csv_files) {
   }
 }
 
-#write.csv(background_data, file="PA-paper/background.csv")
-#write.csv(crw_data, file="PA-paper/crw_data.csv")
+#write.csv(background_data, file="background_data.csv")
+#write.csv(crw_data, file="crw_data.csv")
 ```
+
 Combine presences, crw and background data
+
 ```{r}
-crw_data<-read.csv("PA-paper/crw_data.csv")
-background_data<-read.csv("PA-paper/background.csv")
+crw_data<-read.csv("crw_data.csv")
+background_data<-read.csv("background_data.csv")
 
 presence1<-presence |> dplyr::select(c(id, lon, lat, date))
 presence1$data_type<-"track"
@@ -81,48 +85,47 @@ crw_data<-crw_data |>
   dplyr::select(!c(X,tag, flag, t, x, y))
 
 all<-rbind(presence1, background_data, crw_data)
-all$date1<-as.POSIXct(all$date, format="%Y-%m-%d %H:%M:%S")
-#write.csv(all, file="20231206combinedPA.csv")
 ```
 
 # Extracting spatial and spatio-temporal environmental covariates
 
-1. Static variables
-Sampled predictor layers (creation/modification of source datasets specified in Table 1 of the paper)
-Created a mask layer from the extent of the Carter et al. dataset ("mask.tif")
-Clipped input datasets to this extent
+## Static variables
 
-QGIS a) sample raster tool for grid data, and b)join attributes by location tool for shapefile (categorical) data
+1.  Sampled predictor layers (modification of source layers specified in Table 1 of the manuscript) to obtain values at presences/pseudo-absences in QGIS:
 
-for b) features contain or overlap points. Join type one to many.
+    a)  sample raster tool for grid data
+    b)  join attributes by location tool for shapefile (categorical) data (features contain or overlap points; join type one to many)
 
-## Shapefiles
-- built features
-- geohabitat
-- geomorphology
-- seagrass community type
+2.  Created a mask layer from the extent of the Carter et al. dataset ("mask.tif") and clipped predictor layers to this extent for grid predictions
 
+### Shapefiles
 
-## Rasters
-- bathymetry
-- distance to rivers 
-- distance to reefs
-- distance to coast
-- distance to rec boats
-- seagrass probability
-- relative tidal exposure
-- MMP - frequency of exposure to WT1 and WT2 2003-2022
-- MMP - longterm exposure
-- ruggedness
-- slope
+-   built features
+-   geohabitat
+-   geomorphology
+-   seagrass community type
 
+### Rasters
 
-2. DEA mangrove extraction
+-   bathymetry
+-   distance to rivers
+-   distance to reefs
+-   distance to coast
+-   distance to rec boats
+-   seagrass probability
+-   relative tidal exposure
+-   MMP - frequency of exposure to WT1 and WT2 2003-2022
+-   MMP - longterm exposure
+-   ruggedness
+-   slope
+
+## DEA mangrove extraction
+
 ```{r}
 #Extracted yearly raster via DEA sandbox environment
 #Filtered for values 1-4 in qgis
-#Proximity rasters in qgis
-#Append per matching year:
+#Created proximity rasters in qgis
+#Append per matching year using 
 # pts<-nas%>%mutate(date1=as.Date(aus.date))
 # clipped<-read.csv("PA-paper/crw_data.csv")
 # 
@@ -150,7 +153,6 @@ for b) features contain or overlap points. Join type one to many.
 # raster_list<-lapply(2010:2022, function(year) raster(paste0("enviro datasets/DEA mangroves/Reprojected", year, ".tif")))
 ```
 
-
 ```{r}
 # pts_sf$deamangrove<-NA
 # 
@@ -168,9 +170,8 @@ for b) features contain or overlap points. Join type one to many.
 # }
 ```
 
+4.eReefs: EFI, wind speed, current, salinity, Secchi depth, temperature, zooplankton N
 
-4.eReefs:
-EFI, wind speed, current, salinity, Secchi depth, temperature, zooplankton N
 ```{r}
 #Query AIMS thredds server via ExtractEReefsCRW.R and ExtractEReefsbackground.R
 # break up dataset for processing
@@ -184,6 +185,7 @@ background<-clipped |> filter(data_type=="background")
 ```
 
 Gluing the outputs of the eReefs query scripts back together:
+
 ```{r}
 # hyd4<-read.csv("hydro_4dimscrw.csv")
 # hyd3<-read.csv("hydro_3dimscrw.csv")
@@ -212,77 +214,82 @@ Gluing the outputs of the eReefs query scripts back together:
 # crw<-read.csv("20240304crwwrug.csv")
 ```
 
-
-##########################################
+########################################## 
 
 # For grid prediction:
-## Convert polygon layers to rasters
+
+## Converted polygon layers to rasters
+
 ```{r}
-COMMUNITY<-terra::vect("enviro datasets/NESP predicted distribution of seagrass communities/Shapefiles/GBR_NESP-TWQ-5.4_JCU_Seagrass-communities_20201203.shp")
-COMMUNITY$COMMUNITY<-as.factor(COMMUNITY$COMMUNITY)
-y=terra::rast(COMMUNITY, resolution=common_res, extent=common_extent, crs=common_crs)
-seagrassCom<-terra::rasterize(COMMUNITY, y, field='COMMUNITY')
-seagrasscrop <- crop(seagrassCom, extent(extent))
-plot(seagrasscrop)
-ra<-aggregate(seagrasscrop, fact=2)
-raster::writeRaster(ra, "COMMUNITY.asc")
-
-builtfeature<-terra::vect("enviro datasets/Breakwaters, groynes, seawalls, marinas/QSC_Extracted_Data_20231018_085138072000-40848/data.gdb")
-builtfeature$FEATURETYPE<-as.factor(builtfeature$FEATURETYPE)
-y=terra::rast(builtfeature, resolution=common_res, extent=common_extent, crs=common_crs)
-builtfeature<-terra::rasterize(builtfeature, y, field='FEATURETYPE')
-builtfeatcrop <- crop(builtfeature, extent(extent))
-plot(builtfeatcrop)
-ra<-aggregate(builtfeatcrop, fact=2)
-raster::writeRaster(ra, "builtfeature.asc")
-
-
-geohab<-terra::vect("enviro datasets/qld_geohab_av/czm/pristine_ests/release/qld/shape/geohab_qld_v2.shp")
-geohab$GH_TYPE<-as.factor(geohab$GH_TYPE)
-y=terra::rast(geohab, resolution=common_res, extent=common_extent, crs=common_crs)
-geohab<-terra::rasterize(geohab, y, field='GH_TYPE')
-geohabcrop <- crop(geohab, extent(extent))
-plot(geohabcrop)
-ra<-aggregate(geohabcrop, fact=2)
-raster::writeRaster(ra, "geohab.asc")
-
-marina<-terra::vect("enviro datasets/Breakwaters, groynes, seawalls, marinas/QSC_Extracted_Data_20231018_085120960000-49924/data.gdb")
-marina$FEATURETYPE<-as.factor(marina$FEATURETYPE)
-y=terra::rast(marina, resolution=common_res, extent=common_extent, crs=common_crs)
-marina<-terra::rasterize(marina, y, field='FEATURETYPE')
-marinacrop <- crop(marina, extent(extent))
-plot(marinacrop)
-ra<-aggregate(marinacrop, fact=2)
-raster::writeRaster(ra, "marina.asc")
-
-recboating<-terra::vect("enviro datasets/rec_boating_buffered.shp")
-recboating$FACILITY<-as.factor(recboating$FACILITY)
-y=terra::rast(recboating, resolution=common_res, extent=common_extent, crs=common_crs)
-recboating<-terra::rasterize(recboating, y, field='FACILITY')
-recboatingcrop <- crop(recboating, extent(extent))
-plot(recboatingcrop)
-ra<-aggregate(recboatingcrop, fact=2)
-raster::writeRaster(ra, "recboating.asc")
-
-geomorph<-terra::vect("enviro datasets/Heap2008Geomorphology.shp")
-geomorph$feature<-as.factor(geomorph$feature)
-y=terra::rast(geomorph, resolution=common_res, extent=common_extent, crs=common_crs)
-geomorph<-terra::rasterize(geomorph, y, field='feature')
-geomorphcrop <- crop(geomorph, extent(extent))
-plot(geomorphcrop)
-ra<-aggregate(geomorphcrop, fact=2)
-raster::writeRaster(ra, "geomorph.asc")
+# COMMUNITY<-terra::vect("GBR_NESP-TWQ-5.4_JCU_Seagrass-communities_20201203.shp")
+# COMMUNITY$COMMUNITY<-as.factor(COMMUNITY$COMMUNITY)
+# y=terra::rast(COMMUNITY, resolution=common_res, extent=common_extent, crs=common_crs)
+# seagrassCom<-terra::rasterize(COMMUNITY, y, field='COMMUNITY')
+# seagrasscrop <- crop(seagrassCom, extent(extent))
+# plot(seagrasscrop)
+# ra<-aggregate(seagrasscrop, fact=2)
+# raster::writeRaster(ra, "COMMUNITY.asc")
+# 
+# builtfeature<-terra::vect("QSC_Extracted_Data_20231018_085138072000-40848/data.gdb")
+# builtfeature$FEATURETYPE<-as.factor(builtfeature$FEATURETYPE)
+# y=terra::rast(builtfeature, resolution=common_res, extent=common_extent, crs=common_crs)
+# builtfeature<-terra::rasterize(builtfeature, y, field='FEATURETYPE')
+# builtfeatcrop <- crop(builtfeature, extent(extent))
+# plot(builtfeatcrop)
+# ra<-aggregate(builtfeatcrop, fact=2)
+# raster::writeRaster(ra, "builtfeature.asc")
+# 
+# 
+# geohab<-terra::vect("qld_geohab_av/czm/pristine_ests/release/qld/shape/geohab_qld_v2.shp")
+# geohab$GH_TYPE<-as.factor(geohab$GH_TYPE)
+# y=terra::rast(geohab, resolution=common_res, extent=common_extent, crs=common_crs)
+# geohab<-terra::rasterize(geohab, y, field='GH_TYPE')
+# geohabcrop <- crop(geohab, extent(extent))
+# plot(geohabcrop)
+# ra<-aggregate(geohabcrop, fact=2)
+# raster::writeRaster(ra, "geohab.asc")
+# 
+# marina<-terra::vect("Breakwaters, groynes, seawalls, marinas/QSC_Extracted_Data_20231018_085120960000-49924/data.gdb")
+# marina$FEATURETYPE<-as.factor(marina$FEATURETYPE)
+# y=terra::rast(marina, resolution=common_res, extent=common_extent, crs=common_crs)
+# marina<-terra::rasterize(marina, y, field='FEATURETYPE')
+# marinacrop <- crop(marina, extent(extent))
+# plot(marinacrop)
+# ra<-aggregate(marinacrop, fact=2)
+# raster::writeRaster(ra, "marina.asc")
+# 
+# recboating<-terra::vect("rec_boating_buffered.shp")
+# recboating$FACILITY<-as.factor(recboating$FACILITY)
+# y=terra::rast(recboating, resolution=common_res, extent=common_extent, crs=common_crs)
+# recboating<-terra::rasterize(recboating, y, field='FACILITY')
+# recboatingcrop <- crop(recboating, extent(extent))
+# plot(recboatingcrop)
+# ra<-aggregate(recboatingcrop, fact=2)
+# raster::writeRaster(ra, "recboating.asc")
+# 
+# geomorph<-terra::vect("Heap2008Geomorphology.shp")
+# geomorph$feature<-as.factor(geomorph$feature)
+# y=terra::rast(geomorph, resolution=common_res, extent=common_extent, crs=common_crs)
+# geomorph<-terra::rasterize(geomorph, y, field='feature')
+# geomorphcrop <- crop(geomorph, extent(extent))
+# plot(geomorphcrop)
+# ra<-aggregate(geomorphcrop, fact=2)
+# raster::writeRaster(ra, "geomorph.asc")
 
 ```
+
 ## real time ereefs layers as rasters
+
 ```{r}
 nc_file <- "enviro datasets/ascii rasters for predictions/gbr4_simple_2023-10-19.nc"
 nc_file_bgc <- "enviro datasets/ascii rasters for predictions/gbr4_bgc_simple_2023-10-19.nc"
 ```
+
 ```{r}
 variables_hydro <- c("temp", "salt", "v", "u", "mean_cur", "mean_wspeed", "wspeed_u", "wspeed_v")  # List your variables here
 variables_bgc <-c("Secchi", "EFI", "ZooL_N")
 ```
+
 ```{r}
 raster_layer <- raster(nc_file, varname = 'wspeed_u')
 nc_data<-nc_open(nc_file)

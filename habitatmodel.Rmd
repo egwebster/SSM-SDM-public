@@ -15,26 +15,19 @@ library(sf)
 
 
 ```{r}
-track1<-read.csv("20240212_track.csv")
-#remove spatial/temporal where there is too much missing predictor data
+track1<-read.csv("track.csv")
+#remove spatial/temporal where there is too much missing predictor data (eReefs BGC goes until 2019 only)
 track1%>%arrange(date)%>%visdat::vis_miss()
 #background%>%slice_sample(prop=0.2)%>%arrange(date)%>%visdat::vis_miss()
 track_filtered<-track1%>%filter(!is.na(Secchi))%>%filter(!is.na(date))
 
+crw<-read.csv("crw.csv")
 crw%>%arrange(date)%>%visdat::vis_miss()
 crw_filtered<-crw%>%filter(!is.na(Secchi))
+
+background<-read.csv("background.csv")
 background_filtered<-background%>%filter(!is.na(Secchi))%>%dplyr::select(!X.6)%>%filter(!is.na(date))
-#
-#
-# data<-rbind(crw_filtered, track_filtered)%>%select(!c(X.4, X.3, X.2, X.1))%>%
-#   mutate(COMMUNITY=factor(COMMUNITY),
-#          builtfeature=factor(builtfeature),
-#          geohab=factor(geohab),
-#          recboating=factor(recboating),
-#          marina=factor(marina),
-#          geomorph=factor(geomorph),
-#          dist2coast=dist2coast1_2)%>%
-#   mutate(data_type=ifelse(data_type=="track", 1, 0))
+
 
 common_cols<-intersect(colnames(track_filtered), colnames(nas))
 

@@ -4,8 +4,6 @@ output: html_document
 date: "2023-08-16"
 editor_options: 
   chunk_output_type: console
-  markdown: 
-    wrap: 72
 ---
 
 ```{r setup, include=FALSE}
@@ -30,70 +28,487 @@ library(move)
 library(ctmm)
 library(adehabitatLT)
 require(patchwork)
-library(raster)
-library(sp)
 ```
 
 # Data pre-processing
+Combine ARGOS and FGPS, making sure lc is retained and data are ordered by timestamp
+```{r}
+# FGPS 2021
+GPS201295<-read.csv(file="../2022-01-25_2021tags/201295-1-FastGPS.csv", header=T, skip=3)
+colnames<-colnames(GPS201295)
+GPS201296<-read.csv(file="../2022-01-25_2021tags/201296-1-FastGPS.csv", header=T, skip=3)%>%dplyr::select(colnames)
+GPS201297<-read.csv(file="../2022-01-25_2021tags/201297-1-FastGPS.csv", header=T)%>%dplyr::select(colnames)
+GPS201298<-read.csv(file="../2022-01-25_2021tags/201298-1-FastGPS.csv", header=T)%>%dplyr::select(colnames)
+GPS201299<-read.csv(file="../2022-01-25_2021tags/201299-1-FastGPS.csv", header=T)%>%dplyr::select(colnames)
+GPS201300<-read.csv(file="../2022-01-25_2021tags/201300-1-FastGPS.csv", header=T, skip=3)%>%dplyr::select(colnames)
+GPS201301<-read.csv(file="../2022-01-25_2021tags/201301-1-FastGPS.csv", header=T)%>%dplyr::select(colnames)
+GPS201302<-read.csv(file="../2022-01-25_2021tags/201302-1-FastGPS.csv", header=T)%>%dplyr::select(colnames)
+GPS201303<-read.csv(file="../2022-01-25_2021tags/201303-1-FastGPS.csv", header=T, skip=3)%>%dplyr::select(colnames)
+GPS201304<-read.csv(file="../2022-01-25_2021tags/201304-1-FastGPS.csv", header=T)%>%dplyr::select(colnames)
 
-## Raw data
 
-Raw tracking data for Port Curtis (PC), Shoalwater Bay (SB) and Raine
-Island (RI) are available upon reasonable request from the Queensland
-Department of Environment, Science and Innovation
-([Threatened.Species\@des.qld.gov.au](mailto:Threatened.Species@des.qld.gov.au){.email})
+GPSturts2021<-rbind(GPS201295, GPS201296, GPS201297, GPS201298, GPS201299, GPS201300, GPS201301, GPS201302, GPS201303, GPS201304)
 
-### Variable description
+#FGPS 2019
+GPS181366<-read.csv(file="../ARP2021 CH1/FGPS raw data/181366-1-FastGPS.csv", header=T, skip=3)
+GPS181367<-read.csv(file="../ARP2021 CH1/FGPS raw data/181367-1-FastGPS.csv", header=T, skip=3)
+GPS181368<-read.csv(file="../ARP2021 CH1/FGPS raw data/181368-1-FastGPS.csv", header=T, skip=3)
+GPS181369<-read.csv(file="../ARP2021 CH1/FGPS raw data/181369-1-FastGPS.csv", header=T, skip=3)
+GPS181370<-read.csv(file="../ARP2021 CH1/FGPS raw data/181370-1-FastGPS.csv", header=T, skip=3)
+GPS194460<-read.csv(file="../ARP2021 CH1/FGPS raw data/194460-1-FastGPS.csv", header=T, skip=3)
+GPS194461<-read.csv(file="../ARP2021 CH1/FGPS raw data/194461-2-FastGPS.csv", header=T, skip=3)
+GPS194462<-read.csv(file="../ARP2021 CH1/FGPS raw data/194462-1-FastGPS.csv", header=T, skip=3)
+GPS194463<-read.csv(file="../ARP2021 CH1/FGPS raw data/194463-1-FastGPS.csv", header=T, skip=3)
+GPS194464<-read.csv(file="../ARP2021 CH1/FGPS raw data/194464-2-FastGPS.csv", header=T, skip=3)
+GPS194464_2<-read.csv(file="../ARP2021 CH1/FGPS raw data/194464-4-FastGPS.csv", header=T, skip=3)
+GPS64747<-read.csv(file="../ARP2021 CH1/FGPS raw data/64747-4-FastGPS.csv", header=T, skip=3)
+GPS64748<-read.csv(file="../ARP2021 CH1/FGPS raw data/64748-4-FastGPS.csv", header=T, skip=3)
 
--   id: Unique identifier for turtle
--   qi: Quality index= number of source satellites for FGPS
--   DateTime: Time stamp in GMT, format YYYY-mm-dd HH:MM:SS
--   Type: ARGOS or FGPS
--   sex: Turtle sex
--   ccl: Curved carapace length
--   age.class: Maturity status determined by laparoscopy
--   lc: ARGOS location class, set to G for FGPS. The data contain ARGOS
-    location classes 1,2,3 only.
--   lat: Latitude
--   lon: Longitude
+GPSturts2019<-rbind(GPS181366, GPS181367, GPS194464, GPS194463, GPS194462, GPS194461, GPS194460, GPS181370, GPS181369, GPS181368, GPS194464_2, GPS64747, GPS64748)
 
-Pre-processing steps:
+#CSIRO
+GPS131872<-read.csv(file="../ARP2021 CH1/FGPS raw data/CSIRO/131872_FastGPS.csv", header=T)
+GPS131872<-GPS131872%>%mutate(id="131872")
+GPS131868<-read.csv(file="../ARP2021 CH1/FGPS raw data/CSIRO/131868_FastGPS.csv", header=T)
+GPS131868<-GPS131868%>%mutate(id="131868")
+GPS131869<-read.csv(file="../ARP2021 CH1/FGPS raw data/CSIRO/131869_FastGPS.csv", header=T)
+GPS131869<-GPS131869%>%mutate(id="131869")
+GPS131862<-read.csv(file="../ARP2021 CH1/FGPS raw data/CSIRO/131862_FastGPS.csv", header=T)
+GPS131862<-GPS131862%>%mutate(id="131862")
+GPS126274<-read.csv(file="../ARP2021 CH1/FGPS raw data/CSIRO/126274_FastGPS.csv", header=T)
+GPS126274<-GPS126274%>%mutate(id="126274")
+GPS126275<-read.csv(file="../ARP2021 CH1/FGPS raw data/CSIRO/126275_FastGPS.csv", header=T)
+GPS126275<-GPS126275%>%mutate(id="126275")
+GPS126276<-read.csv(file="../ARP2021 CH1/FGPS raw data/CSIRO/126276_FastGPS.csv", header=T)
+GPS126276<-GPS126276%>%mutate(id="126276")
+GPS126272<-read.csv(file="../ARP2021 CH1/FGPS raw data/CSIRO/126272_FastGPS.csv", header=T)
+GPS126272<-GPS126272%>%mutate(id="126272")
+GPS126273<-read.csv(file="../ARP2021 CH1/FGPS raw data/CSIRO/126273_FastGPS.csv", header=T)
+GPS126273<-GPS126273%>%mutate(id="126273")
 
-1.  RI foraging periods were visually separated from post-nesting in
-    QGIS. Removed non-foraging periods from SI and PC tracks.
-2.  Removed everything before release time for PC or first 24 hours for
-    SB
-3.  Removed any duplicates or empty rows
-4.  Combined data for PC, SB and RI = "combined"
+GPSCSIRO<-rbind(GPS131872, GPS131868, GPS131869, GPS131862, GPS126274, GPS126275, GPS126276, GPS126272, GPS126273)
 
-Pre-filtering using SDLfilter improved habitat model fits:
+#GS_GPS
+GS_GPS<- readRDS(file="../ARP2021 CH1/FGPS raw data/GS_GPS.rds")
+
+#Combine FGPS
+GPS<-rbind(GPSturts2021, GPSturts2019)
+names(GPS)[names(GPS) == 'Name'] <- 'id'
+names(GPS)[names(GPS) == 'Latitude'] <- 'lat'
+names(GPS)[names(GPS) == 'Longitude'] <- 'lon'
+names(GPS)[names(GPS)== 'Satellites']<-'qi'
+
+
+GPS<-within(GPS,{
+  DateTime<-as.POSIXct(strptime(paste(Day, Time), format="%d-%b-%Y %H:%M:%S", tz="GMT"))})
+
+names(GPSCSIRO)[names(GPSCSIRO) == 'FGL_DATETIME'] <- 'DateTime'
+names(GPSCSIRO)[names(GPSCSIRO) == 'FGL_LONGITUDE'] <- 'lon'
+names(GPSCSIRO)[names(GPSCSIRO)== 'FGL_LATITUDE']<-'lat'
+names(GPSCSIRO)[names(GPSCSIRO)== 'FGL_SATELLITES']<-'qi'
+names(GPSCSIRO)[names(GPSCSIRO)== 'FGL_RESIDUAL']<-'Residual'
+
+GPSCSIRO$DateTime <- as.POSIXct(GPSCSIRO$DateTime, format = '%d/%m/%Y %H:%M')
+
+common_cols <- intersect(colnames(GPS), colnames(GPSCSIRO))
+GPS<-rbind(
+  subset(GPS, select = common_cols),
+  subset(GPSCSIRO, select = common_cols)
+)
+
+GS_GPS$DateTime<-GS_GPS$DateTime-17*60*60
+tz(GS_GPS$DateTime)<-"GMT"
+
+common_cols <- intersect(colnames(GPS), colnames(GS_GPS))
+GPS<-rbind(
+  subset(GPS, select = common_cols),
+  subset(GS_GPS, select = common_cols)
+)
+
+##### STOP HERE TO LOOK AT TIMESTAMPS - IS IN GMT OR UTC
+
+tz(GPS$DateTime)
+table(GPSturts2021$InitType)
+
+
+#### ARGOS
+GS_ARGOS<- readRDS(file="../OCT2021 CH3/ARGOS locs/GS_ARGOS.rds")
+
+# 2019 & 2021 ARGOS
+GPS181366<-read.csv(file="../OCT2021 CH3/ARGOS locs/181366-Argos.csv", header=T)
+GPS181367<-read.csv(file="../OCT2021 CH3/ARGOS locs/181367-Argos.csv", header=T)
+GPS181368<-read.csv(file="../OCT2021 CH3/ARGOS locs/181368-Argos.csv", header=T)
+GPS181369<-read.csv(file="../OCT2021 CH3/ARGOS locs/181369-Argos.csv", header=T)
+GPS181370<-read.csv(file="../OCT2021 CH3/ARGOS locs/181370-Argos.csv", header=T)
+GPS194460<-read.csv(file="../OCT2021 CH3/ARGOS locs/194460-Argos.csv", header=T)
+GPS194461<-read.csv(file="../OCT2021 CH3/ARGOS locs/194461-Argos.csv", header=T)
+GPS194462<-read.csv(file="../OCT2021 CH3/ARGOS locs/194462-Argos.csv", header=T)
+GPS194463<-read.csv(file="../OCT2021 CH3/ARGOS locs/194463-Argos.csv", header=T)
+GPS194464<-read.csv(file="../OCT2021 CH3/ARGOS locs/194464-Argos.csv", header=T)
+GPS194464_2<-read.csv(file="../OCT2021 CH3/ARGOS locs/194464-Argos 2.csv", header=T)
+GPS201295<-read.csv(file="../OCT2021 CH3/ARGOS locs/201295-Argos.csv", header=T)
+GPS201296<-read.csv(file="../OCT2021 CH3/ARGOS locs/201296-Argos.csv", header=T)
+GPS201297<-read.csv(file="../OCT2021 CH3/ARGOS locs/201297-Argos.csv", header=T)
+GPS201298<-read.csv(file="../OCT2021 CH3/ARGOS locs/201298-Argos.csv", header=T)
+GPS201299<-read.csv(file="../OCT2021 CH3/ARGOS locs/201299-Argos.csv", header=T)
+GPS201300<-read.csv(file="../OCT2021 CH3/ARGOS locs/201300-Argos.csv", header=T)
+GPS201301<-read.csv(file="../OCT2021 CH3/ARGOS locs/201301-Argos.csv", header=T)
+GPS201302<-read.csv(file="../OCT2021 CH3/ARGOS locs/201302-Argos.csv", header=T)
+GPS201303<-read.csv(file="../OCT2021 CH3/ARGOS locs/201303-Argos.csv", header=T)
+GPS201304<-read.csv(file="../OCT2021 CH3/ARGOS locs/201304-Argos.csv", header=T)
+GPS64747<-read.csv(file="../OCT2021 CH3/ARGOS locs/64747-Argos.csv", header=T)
+GPS64748<-read.csv(file="../OCT2021 CH3/ARGOS locs/64748-Argos.csv", header=T)
+
+
+Argosturts<-rbind(GPS181366, GPS181367, GPS194464, GPS194463, GPS194462, GPS194461, GPS194460, GPS181370, GPS181369, GPS181368, GPS194464_2, GPS64747, GPS64748, GPS201295, GPS201296, GPS201297, GPS201298, GPS201299, GPS201300, GPS201301, GPS201302, GPS201303, GPS201304)
+
+# CSIRO ARGOS
+GPS126272<- read.csv(file="../OCT2021 CH3/ARGOS locs/126272_Argos.csv", header=T)
+GPS126273<- read.csv(file="../OCT2021 CH3/ARGOS locs/126273_Argos.csv", header=T)
+GPS126274<- read.csv(file="../OCT2021 CH3/ARGOS locs/126274_Argos.csv", header=T)
+GPS126275<- read.csv(file="../OCT2021 CH3/ARGOS locs/126275_Argos.csv", header=T)
+GPS126276<- read.csv(file="../OCT2021 CH3/ARGOS locs/126276_Argos.csv", header=T)
+GPS131862<- read.csv(file="../OCT2021 CH3/ARGOS locs/131862_Argos.csv", header=T)
+GPS131868<- read.csv(file="../OCT2021 CH3/ARGOS locs/131868_Argos.csv", header=T)
+GPS131869<- read.csv(file="../OCT2021 CH3/ARGOS locs/131869_Argos.csv", header=T)
+GPS131871<- read.csv(file="../OCT2021 CH3/ARGOS locs/131871_Argos.csv", header=T)
+GPS131872<- read.csv(file="../OCT2021 CH3/ARGOS locs/131872_Argos.csv", header=T)
+GPS131872<-GPS131872%>%mutate(id="131872")
+GPS131868<-GPS131868%>%mutate(id="131868")
+GPS131869<-GPS131869%>%mutate(id="131869")
+GPS131862<-GPS131862%>%mutate(id="131862")
+GPS126274<-GPS126274%>%mutate(id="126274")
+GPS126275<-GPS126275%>%mutate(id="126275")
+GPS126276<-GPS126276%>%mutate(id="126276")
+GPS126272<-GPS126272%>%mutate(id="126272")
+GPS126273<-GPS126273%>%mutate(id="126273")
+
+ArgosCSIRO<-rbind(GPS131872, GPS131868, GPS131869, GPS131862, GPS126274, GPS126275, GPS126276, GPS126272, GPS126273)
+
+
+##### STOP HERE TO LOOK AT TIMESTAMP - IS IN GMT OR UTC
+
+
+names(Argosturts)[names(Argosturts) == 'Ptt'] <- 'id'
+names(Argosturts)[names(Argosturts) == 'Latitude'] <- 'lat'
+names(Argosturts)[names(Argosturts) == 'Longitude'] <- 'lon'
+names(Argosturts)[names(Argosturts)== 'LocationQuality']<-'qi'
+
+
+Argosturts<-within(Argosturts,{
+  DateTime<-as.POSIXct(strptime(Date, format="%H:%M:%S %d-%b-%Y", tz="GMT"))})
+
+names(ArgosCSIRO)[names(ArgosCSIRO) == 'SLC_LATITUDE'] <- 'lat'
+names(ArgosCSIRO)[names(ArgosCSIRO) == 'SLC_LONGITUDE'] <- 'lon'
+names(ArgosCSIRO)[names(ArgosCSIRO)== 'SLC_LOCATION_CLASS']<-'qi'
+ArgosCSIRO$DateTime <- as.POSIXct(paste(sub(" .*", "", ArgosCSIRO$SLC_MSG_DATE), sub(".*\\s+", "", ArgosCSIRO$SLC_MSG_TIME)), format = '%d/%m/%Y %H:%M:%S', tz="GMT")
+
+Argosturts<-within(Argosturts,{
+  DateTime<-as.POSIXct(strptime(Date, format="%H:%M:%S %d-%b-%Y", tz="GMT"))})
+
+common_cols <- intersect(colnames(Argosturts), colnames(ArgosCSIRO))
+ARGOS<-rbind(
+  subset(Argosturts, select = common_cols),
+  subset(ArgosCSIRO, select = common_cols)
+)
+
+GS_ARGOS$DateTime<-GS_ARGOS$DateTime-17*60*60
+tz(GS_ARGOS$DateTime)<-"GMT"
+
+common_cols <- intersect(colnames(ARGOS), colnames(GS_ARGOS))
+ARGOS<-rbind(
+  subset(ARGOS, select = common_cols),
+  subset(GS_ARGOS, select = common_cols)
+)
+
+
+# retain good location classes
+ARGOS<-ARGOS%>%filter(qi%in%c(1,2,3))
+GPS$Type<-'FGPS'
+ARGOS$Type<-'ARGOS'
+
+
+# Combine ARGOS and FGPS, rename columns, and create lc column for FGPS
+all<-rbind(ARGOS, GPS)
+all<-all%>%mutate(lc=ifelse(Type=="FGPS", "G", qi))
+
+# find Primary tag id from metadata table and recode ids
+metadata<-read.csv("20230816GL_Metadata.csv", fileEncoding="UTF-8-BOM")
+metadata<-metadata%>%mutate(ptt=as.character(ptt))%>%
+  mutate(year=year(dmy(capt.date)))
+all$ptt<-sub(".*_(\\d+$)", "\\1", all$id)
+all<-all%>%group_by(id)%>%arrange(DateTime)%>%
+  mutate(first.date=first(DateTime))%>%
+  mutate(year=year(first.date))
+
+
+df1 <- all %>%
+  left_join(metadata, by = c("ptt", "year")) %>%
+  mutate(
+    id = if_else(!grepl("_", id), paste0(primary.tag, "_", ptt), id)
+  )  
+# save unfiltered data
+# write.csv(df1, file="rawFGPS&ARGOS.csv")
+```
+```{r}
+# Brought csv in to QGIS and visualised individual tracks. Removed 3 possible breeding/courtship in QGIS. When bringing DateTime field into QGIS make sure it comes in as "Date and Time" format to not lose timestamps.
+GL<-read.csv("GL_foraging_only.csv")
+```
+
+Shoalwater and Raine data
+```{r}
+## Raine FGPS (n=8)
+GPS133762<-read.csv(file="../Raine tags/133762-9-FastGPS.csv", header=T) |> mutate(Day=dmy(Day))
+gcolnames<-colnames(GPS133762)
+GPS45755<-read.csv(file="../Raine tags/batch (4)/45755/45755-1-FastGPS.csv", header=T, skip=3)%>%dplyr::select(colnames)|> mutate(Day=dmy(Day))
+GPS45791<-read.csv(file="../Raine tags/45791-1-FastGPS.csv", header=T, skip=3)%>%dplyr::select(colnames)|> mutate(Day=dmy(Day))
+GPS45731<-read.csv(file="../Raine tags/batch (4)/45731/45731-1-FastGPS.csv", header=T, skip=3)%>%dplyr::select(colnames)|> mutate(Day=dmy(Day))
+GPS45769<-read.csv(file="../Raine tags/batch (4)/45769/45769-1-FastGPS.csv", header=T, skip=3)%>%dplyr::select(colnames)|> mutate(Day=dmy(Day))
+#GPS45771<-read.csv(file="../Raine tags/batch (4)/45771/45771-All.csv", header=T)%>%dplyr::select(colnames) Only got ARGOS from this tag
+GPS45778<-read.csv(file="../Raine tags/45778/45778-1-FastGPS.csv", header=T, skip=3)%>%dplyr::select(colnames)|> mutate(Day=dmy(Day))
+GPS45786<-read.csv(file="../Raine tags/45786/45786-1-FastGPS.csv", header=T, skip=3)%>%dplyr::select(colnames)|> mutate(Day=dmy(Day))
+GPS45787<-read.csv(file="../Raine tags/45787/45787-1-FastGPS.csv", header=T, skip=3)%>%dplyr::select(colnames)|> mutate(Day=dmy(Day))
+
+
+
+# GPS133763<-read.csv(file="../Raine tags/133763-1-FastGPS.csv", header=T)%>%dplyr::select(colnames)
+# #tracks stopped before foraging - don't include
+# GPS133766<-read.csv(file="../Raine tags/133766-2-FastGPS.csv", header=T)%>%dplyr::select(colnames)
+# #tracks stopped before foraging - don't include
+
+#Combine FGPS
+GPS<-rbind(GPS133762, GPS45791, GPS45731, GPS45769, GPS45778, GPS45786, GPS45787)
+# find Primary tag id from metadata table and recode ids
+metadataRI<-read.csv("../Raine tags/metadata.csv", fileEncoding="UTF-8-BOM")
+metadataRI<-metadataRI%>%mutate(ptt=as.character(PTT))
+GPS$ptt<-sub(".*_(\\d+$)", "\\1", GPS$Name)
+GPS<-left_join(GPS, metadataRI, by="ptt")
+GPS$id<-paste(GPS$PTAG, GPS$ptt, sep="_")
+names(GPS)[names(GPS) == 'Latitude'] <- 'lat'
+names(GPS)[names(GPS) == 'Longitude'] <- 'lon'
+names(GPS)[names(GPS)== 'Satellites']<-'qi'
+GPS<-within(GPS,{
+  DateTime<-as.POSIXct(strptime(paste(Day, Time), format="%Y-%m-%d %H:%M:%S", tz="GMT"))})
+GPS$Type<-"FGPS"
+GPS$lc<-"G"
+
+
+GPS<-GPS%>%dplyr::select(c(id, CCL, qi, Maturity, Sex, DateTime, Type, lat, lon, lc))
+
+
+
+# ARGOS?
+GPS88365<-read.csv(file="../Raine tags/88365.csv", header=T)
+GPS88368<-read.csv(file="../Raine tags/88365.csv", header=T)
+GPS133762<-read.csv(file="../Raine tags/batch (5)/133762/133762-Argos.csv", header=T)
+GPS45755<-read.csv(file="../Raine tags/batch (4)/45755/45755-Argos.csv", header=T)
+GPS45791<-read.csv(file="../Raine tags/45791-Argos.csv", header=T)
+GPS45731<-read.csv(file="../Raine tags/batch (4)/45731/45731-Argos.csv", header=T)
+GPS45769<-read.csv(file="../Raine tags/batch (4)/45769/45769-Argos.csv", header=T)
+GPS45771<-read.csv(file="../Raine tags/batch (4)/45771/45771-Argos.csv", header=T)
+GPS45778<-read.csv(file="../Raine tags/45778/45778-Argos.csv", header=T)
+GPS45786<-read.csv(file="../Raine tags/45786/45786-Argos.csv", header=T)
+GPS45787<-read.csv(file="../Raine tags/45787/45787-Argos.csv", header=T)
+ARGOS<-rbind(GPS133762, GPS45755, GPS45791, GPS45731, GPS45769, GPS45771, GPS45778, GPS45786, GPS45787)
+ARGOS2<-rbind(GPS88365, GPS88368)
+
+
+names(ARGOS)[names(ARGOS) == 'Ptt'] <- 'id'
+names(ARGOS)[names(ARGOS) == 'Latitude'] <- 'lat'
+names(ARGOS)[names(ARGOS) == 'Longitude'] <- 'lon'
+names(ARGOS)[names(ARGOS)== 'LocationQuality']<-'qi'
+
+
+ARGOS<-within(ARGOS,{
+  DateTime<-as.POSIXct(strptime(Date, format="%H:%M:%S %d-%b-%Y", tz="GMT"))})
+
+names(ARGOS2)[names(ARGOS2) == 'tag_id'] <- 'id'
+names(ARGOS2)[names(ARGOS2) == 'lat1'] <- 'lat'
+names(ARGOS2)[names(ARGOS2) == 'lon1'] <- 'lon'
+names(ARGOS2)[names(ARGOS2)== 'lc']<-'qi'
+
+
+ARGOS2<-within(ARGOS2,{
+  DateTime<-as.POSIXct(strptime(utc, format="%d/%b/%Y %H:%M:%S ", tz="GMT"))})
+
+common_cols <- intersect(colnames(ARGOS), colnames(ARGOS2))
+ARGOS<-rbind(
+  subset(ARGOS, select = common_cols),
+  subset(ARGOS2, select = common_cols)
+)
+
+ARGOS$ptt<-sub(".*_(\\d+$)", "\\1", ARGOS$id)
+ARGOS<-left_join(ARGOS, metadataRI, by="ptt")
+ARGOS$id<-paste(ARGOS$PTAG, ARGOS$ptt, sep="_")
+
+# retain good location classes
+ARGOS<-ARGOS%>%filter(qi%in%c(1,2,3))
+ARGOS$Type<-'ARGOS'
+ARGOS$lc<-ARGOS$qi
+
+
+# Combine ARGOS and FGPS, rename columns, and create lc column for FGPS
+common_cols <- intersect(colnames(ARGOS), colnames(GPS))
+RI<-rbind(subset(ARGOS, select=common_cols), subset(GPS, select=common_cols))
+RI<-RI |> arrange(id,DateTime) |> filter(!is.na(DateTime)) |> filter(!is.na(lat))
+
+#write.csv(RI, "Raine.rawFGPSARGOS.csv")
+```
+```{r}
+# # # Retain only foraging- pulled out in QGIS:
+Raine<-read.csv(file="Raine_just_foraging.csv", header=T)
+```
+```{r}
+## Shoalwater
+# ARGOS (n=10), no data avaiable for PTTs 72448 & 88074
+A48861<-read.csv(file="../Shoalwater tags/batch (9)/48861/48861-Argos.csv", header=T)
+A48862<-read.csv(file="../Shoalwater tags/batch (9)/48862/48862-Argos.csv", header=T)
+A88072<-read.csv(file="../Shoalwater tags/batch (9)/88072/88072-Argos.csv", header=T)
+A88076<-read.csv(file="../Shoalwater tags/batch (9)/88076/88076-Argos.csv", header=T)
+A96774<-read.csv(file="../Shoalwater tags/batch (9)/96774/96774-Argos.csv", header=T)
+A96775<-read.csv(file="../Shoalwater tags/batch (9)/96775/96775-Argos.csv", header=T)
+A96776<-read.csv(file="../Shoalwater tags/batch (9)/96776/96776-Argos.csv", header=T)
+A96777<-read.csv(file="../Shoalwater tags/batch (9)/96777/96777-Argos.csv", header=T)
+A96778<-read.csv(file="../Shoalwater tags/batch (9)/48861/48861-Argos.csv", header=T)
+
+ArgosSh<-rbind(A48861, A48862, A88072, A88076, A96774, A96775, A96776, A96777, A96778)
+
+ArgosSh$ptt<-sub(".*_(\\d+$)", "\\1", ArgosSh$Ptt)
+metadataSB<-read.csv("../Shoalwater tags/SHOALWATERTAGS.csv", fileEncoding="UTF-8-BOM")
+metadataSB<-metadataSB%>%mutate(ptt=as.character(PTT))
+ArgosSh<-left_join(ArgosSh, metadataSB, by="ptt")
+ArgosSh$id<-paste(ArgosSh$PTAG, ArgosSh$ptt, sep="_")
+names(ArgosSh)[names(ArgosSh) == 'Latitude'] <- 'lat'
+names(ArgosSh)[names(ArgosSh) == 'Longitude'] <- 'lon'
+names(ArgosSh)[names(ArgosSh)== 'LocationQuality']<-'qi'
+
+
+ArgosSh<-within(ArgosSh,{
+  DateTime<-as.POSIXct(strptime(Date, format="%H:%M:%S %d-%b-%Y", tz="GMT"))})
+ArgosSh$Type<-'ARGOS'
+ArgosSh<-ArgosSh%>%mutate(lc=qi)
+ArgosSh<-ArgosSh%>%filter(qi%in%c(1,2,3))
+ArgosSh<-ArgosSh |> filter(!is.na(lat))
+
+#write.csv(ArgosSh, "SBArgosraw.csv")
+
+#Included when turtles returned to capture location or exhibited foraging behaviour (non-directed movement for 3 consecutive days). Excluded residual error >30 or fewer than 4 satellites. Then with Shimada dd filter. Implausible locations on land where basking was inaccessible were removed.
+
+# GPS from Shoalwater Bay lacking documentation of timestamp format
+# GPS96777_2<-read.csv(file="../Shoalwater tags/Point Layers/96777.csv", header=T)# same PTT as above
+# GPS96780<-read.csv(file="../Shoalwater tags/Point Layers/96780.csv", header=T)
+# GPS108469<-read.csv(file="../Shoalwater tags/Point Layers/108469.csv", header=T)
+# GPS108472<-read.csv(file="../Shoalwater tags/Point Layers/108472.csv", header=T)
+# GPS120640<-read.csv(file="../Shoalwater tags/Point Layers/120640.csv", header=T)
+# GPS120641<-read.csv(file="../Shoalwater tags/Point Layers/120641.csv", header=T)
+# 
+# 
+# GPSSh<-rbind(GPS96777_2, GPS96780, GPS108469, GPS108472, GPS120640, GPS120641)
+# 
+# GPSSh$ptt<-sub(".*_(\\d+$)", "\\1", GPSSh$Animal_ID)
+# GPSSh<-left_join(GPSSh, metadataSB, by="ptt")
+# GPSSh$id<-paste(GPSSh$PTAG, GPSSh$ptt, sep="_")
+# names(GPSSh)[names(GPSSh) == 'DD_Lat'] <- 'lat'
+# names(GPSSh)[names(GPSSh) == 'DD_Long'] <- 'lon'
+# names(GPSSh)[names(GPSSh)== 'Sats_Used']<-'qi'
+# GPSSh$Type<-"FGPS"
+# GPSSh$lc<-"G"
+# 
+# # Assuming TmAP_hrs_ is numerical representation of time
+# GPSSh$QLD <- as.Date(GPSSh$QLD, format="%Y/%m/%d")
+#   # Calculate hours and minutes
+# GPSSh<-GPSSh%>%
+#   mutate(Time=seconds(TmAP_hrs_*3600))%>%
+#   mutate(DateTime=as.POSIXct(trunc(QLD, units="days") + Time))
+# # combine Argos and GPS
+# common_cols <- intersect(colnames(ArgosSh), colnames(GPSSh))
+# Sh<-rbind(
+#   subset(ArgosSh, select = common_cols),
+#   subset(GPSSh, select = common_cols)
+# )
+
+# write.csv(Sh, file="SB.rawFGPSARGOS.csv")
+```
+```{r}
+
+# Checking for non-foraging in QGIS: 
+
+SB<-read.csv("SBArgos_foraging_only.csv")
+
+
+#####################
+SB$Deploy.site<-"SB"
+Raine$Deploy.site<-"RI"
+GL$Deploy.site<-"GL"
+```
+
+
+Remove first 24h
+```{r}
+# Raine post-breeding tracks already removed
+# Shoalwater, removed first 24h
+Sh.inds<-unique(SB$id)
+SB$DateTime<-as.POSIXct(SB$DateTime, format='%Y/%m/%d %H:%M:%S')
+
+SB <-SB%>%
+  arrange(id, DateTime) %>%
+  group_by(id) %>%
+  filter(!(DateTime < min(DateTime) + hours(24)))
+```
 
 ```{r}
-# data-driven filter
-combined<-combined%>%mutate(Type=ifelse(lc=="G", "FGPS", "ARGOS"))%>%
-  mutate(DateTime=as.POSIXct(DateTime, format='%Y-%m-%d %H:%M:%S', tz="GMT"))%>%
-  group_by(id)%>%arrange(DateTime) # Make sure data are ordered by timestamp
-GPS<-combined%>%filter(Type=="FGPS")%>%ungroup()
-ARGOS<-combined%>%filter(Type=="ARGOS")%>%ungroup()
+# Gladstone
+GL$DateTime<-as.POSIXct(GL$DateTime, format='%Y/%m/%d %H:%M:%S', tz="GMT")
+GL <-GL%>%
+  arrange(id, DateTime) %>%
+  group_by(id) %>%
+  filter(!(DateTime < min(DateTime) + hours(24))) #remove first 24 hours
+glimpse(GL)
+```
+
+Combine sites and remove any empty rows
+```{r}
+Raine$DateTime<-as.POSIXct(Raine$DateTime, format='%Y/%m/%d %H:%M:%S', tz="GMT")
+SB$lc<-as.character(SB$lc)
+common_cols <- intersect(colnames(GL), colnames(SB))
+GLRISB<-rbind(subset(GL, select=common_cols), subset(Raine, select=common_cols), subset(SB, select=common_cols))
+
+GLRISB<-GLRISB[!(GLRISB$lon== "" | is.na(GLRISB$lon)), ] # remove empty rows
+#GLRISB<-GLRISB%>%group_by(id, Type)%>%distinct(lat,lon,DateTime, .keep_all=T) # remove duplicates
+
+#write.csv(GLRISB, "20240704rawFGPS&ARGOS.csv")
+```
+
+# SDLfilter
+```{r}
+# ddfilter
+GPS<-GLRISB%>%filter(Type=="FGPS")%>%ungroup()
+ARGOS<-GLRISB%>%filter(Type=="ARGOS")%>%ungroup()
 
 GPS<-as.data.frame(GPS)
 ARGOS<-as.data.frame(ARGOS)
 
 
 dd.GPS<-ddfilter(GPS, vmax=9.9, qi=4, ia=90, vmaxlp=2.0)
-dd.ARGOS<-ddfilter(ARGOS, vmax=9.9, qi=1, ia=90, vmaxlp=2.0)
+dd.ARGOS<-ddfilter(ARGOS, vmax=9.9, qi=1, ia=90, vmaxlp=2.0) 
+# insufficient data to apply ddfilter_loop to;
+# QA45701_96774, QA46115_88076
 
 
 dd.data<-rbind(dd.GPS, dd.ARGOS)
+
+
+dup.data<-dupfilter(dd.data)
 ```
 
-Remove points on land
-
+# Remove points on land
 ```{r}
-# Load the Intertidal Extents Model Relative Extents Model (Geoscience Australia)
-# https://ecat.ga.gov.au/geonetwork/srv/api/records/7d6f3432-5f93-45ee-8d6c-14b26740048a
+library(raster)
+library(sp)
 
+# Load the raster data
 raster_data <- raster("enviro datasets/100482_RelativeExtentsLayer/ITEM_REL_mosaic_1987_2015.tif")
+# layer available at https://ecat.ga.gov.au/geonetwork/srv/eng/catalog.search#/metadata/100482
 
 # Load the point data
 LatLon <- data.frame(y=dd.data$lat, x=dd.data$lon)
@@ -105,59 +520,74 @@ mypoints = SpatialPoints(LatLon, proj4string = CRS("+init=epsg:4326"))
 myvalues = raster::extract(raster_data, mypoints)
 all<-cbind(dd.data, myvalues)
 
-# Select the points with values less than 9 (land)
+# Select the points with values less than 9
 filtered_point_data <- all |> filter(myvalues<9)
+# STOP HERE and examine in GIS
 
+# there is still a spurious location?
+write.csv(filtered_point_data, file="20240704filteredFGPS&ARGOS.csv")
 ```
 
-Separating tracks with gaps of more than 3 days
 
 ```{r}
-# if previous timestamp is more than 3 days previous, assign a new id
-Filtered_3day<-filtered_point_data%>%
-  arrange(DateTime)%>%filter(!is.na(DateTime))%>%
-  group_by(id1)%>%
-  mutate(timediff=DateTime-lag(DateTime), # timediff is na for the first interval of each id
-         id_3daygaps=ifelse(is.na(timediff), 0, ifelse(timediff>259200, 1, 0)), 
-         cumsum=cumsum(id_3daygaps), #3 day splits
-         id_split=paste(id1, cumsum, sep="_")) 
-
-
-# retain only tracks with at least 20 locations
-Filtered20plus<-Filtered_3day%>%group_by(id_split)%>%filter(n()>=20) |> droplevels()
+# # how many points per day on average 
+# for estimating time steps for ssm
+filtered_point_data%>%
+  group_by(id, as.Date(DateTime))%>%
+  dplyr::summarise(n=n())%>%group_by(id)%>%
+  summarise(mean_id=mean(n))%>%summarise(mean_all=mean(mean_id)) # 6 for filtered- could get points every 4hrs; 8 for unfiltered (every 3 hrs)
 ```
+
+```{r}
+# combined<-read.csv("R-Sh-G-FGPSARGOS.raw.csv") #raw data
+# trying with filtered data
+combined<-filtered_point_data
+
+# if previous timestamp is more than 3 days previous, assign a new id
+combined_split<-combined%>%
+  group_by(id)%>%
+  arrange(DateTime)%>%
+  mutate(timediff=DateTime-lag(DateTime), 
+         id_3daygaps=ifelse(is.na(timediff), 0, ifelse(timediff>259200, 1, 0)), 
+         cumsum=cumsum(id_3daygaps), 
+         id_split=paste(id, cumsum, sep="_")) 
+# note that timediff is na for the first interval of each id, which was causing the first id_3daygaps of each id1 group to be na - fixed now. 
+glimpse(combined_split)
+
+table(combined_split$id_split)
+
+# retain only tracks with at least 20 locations?
+combined20plus<-combined_split%>%group_by(id_split)%>%filter(n()>=20) |> droplevels()
+table(combined20plus$id_split)
+```
+
 
 # State space models
+see https://esajournals.onlinelibrary.wiley.com/doi/full/10.1002/ecm.1470 
+State space models and flexible hierachical models- observations are imperfect measures of temporally evolving hidden states. Can be linear or non-linear and use a variety of statistical distributions. 
+Assumptions:
+1. state time series evolves as a Markov process (i.e. the state at time t, depends only on the state at the previous step t-1). 
+2. observations are independent of one another once we account for dependence on the states i.e. any dependence between observations is the result of dependence between hidden states. 
 
-see
-<https://esajournals.onlinelibrary.wiley.com/doi/full/10.1002/ecm.1470>
-State space models and flexible hierachical models- observations are
-imperfect measures of temporally evolving hidden states. Can be linear
-or non-linear and use a variety of statistical distributions.
-Assumptions: 1. state time series evolves as a Markov process (i.e. the
-state at time t, depends only on the state at the previous step t-1). 2.
-observations are independent of one another once we account for
-dependence on the states i.e. any dependence between observations is the
-result of dependence between hidden states.
+## Fit SSM with Animotum
 
-# Fit SSM with Animotum
-
-Animotum assumes GPS data are truth - but we used user-supplied
-uncertainty as estimated per \# satellites: Dujon, A.M., Lindstrom, R.T.
-and Hays, G.C. (2014), The accuracy of Fastloc-GPS locations and
-implications for animal tracking. Methods Ecol Evol, 5: 1162-1169.
-<https://doi.org/10.1111/2041-210X.12286>
-
+Animotum assumes GPS data are truth - maybe this assumption is ok given that the resolution of the spatial data way exceeds the error margins of FGPS.
+Solution to this found 21/09/2023 (setting up table of sd by number of satellites). 
 ```{r}
-## read data, set GPS (G) to Generic Locations (GL) i.e. specifying user-supplied uncertainty 
-Locs <- Filtered20plus |> ungroup() |> 
+## read data, set GPS (G) to Generic Locations (GL) so user-supplied uncertainty 
+##  estimates can be used. 
+GPS4ssm <- combined20plus |> ungroup() |> 
   #dplyr::select(-1) |>
-  #mutate(lc = ifelse(lc == "G", "GL", lc)) |>
-  dplyr::filter(!is.na(DateTime)) ##  Remove records with NA DateTime
+  #mutate(lc = ifelse(lc == "G", "GL", lc)) # turning this off will use AniMotums defaults for GPS
 ```
 
+
 ```{r}
-## set up table of standard deviations by # Sats - this assumes the errors are symmetric. 
+
+## set up table of SD's by # Sats - this assumes the errors are symmetric. You 
+##   could replace the point estimates with the upper CI but the distances 
+##   are not that different
+## estimates are from Webster et al. 2022
 GPSerr.df <- tibble(qi = 4:11, 
                         x.sd = c(937.02, 
                                  630.75, 
@@ -169,63 +599,32 @@ GPSerr.df <- tibble(qi = 4:11,
                                  10.67),
                         y.sd = x.sd)
 ```
-
 ```{r}
 ## merge SD's with location data
-tmp <- left_join(Locs, GPSerr.df, by = "qi") |> dplyr::select(!c(id, id1))
+tmp <- left_join(GPS4ssm, GPSerr.df, by = "qi") |> dplyr::select(!c(id))
 
+# try for first 5 
 ids<-unique(tmp$id_split)
 
 ## use aniMotum::format_data to simplify set up for fitting SSM
 d <- format_data(tmp, id="id_split", date = "DateTime", coord = c("lon","lat"))
 ```
-
-The below was scripted to run all individuals in the dataset as a loop.
-The code below attempts to find the optimal time-step for each
-individual's track. However, the final outputs we generated by running
-each individual manually. This allowed us to specify the time_step as
-appropriate, and to visually examine the diagnostic plots one at a time.
-
 ```{r}
-## fit SSM using loop
-results <- list() # empty list
-
-for (i in c(1)) { #length(ids))
-thisturt<-d[d$id%in%ids[i],]
-thisName <- unique(thisturt$id)#taking name from the dataframe
-  cat("doing", thisName, "\n")
-  
-   # Try different time steps
-  best_result <- NULL
-  for (time_step in c(4,6,12,24,48,72)) {
-    # Fit the SSM
-    try({
-    result <- aniMotum::fit_ssm(thisturt, vmax = 3, model = "mp", time.step = time_step, map = list(rho_o = factor(NA)))
-})
-    # Check if fitting was successful
-    if (!(result$converged=="FALSE"|result$pdHess=="FALSE")) {
-      best_result <- result
-      break
-    }
-  }
-  # Handle the case where no suitable time step was found
-  if (is.null(best_result)) {
-    message("No suitable time step found for ID:", id)
-  }
-  # Store the best result
-  results[[i]] <- best_result
-}
-
-
-# save result
-saveRDS(results, "20231116fit_ssm_outputALL.Rdata")
+# fit SSM
+fit2 <- fit_ssm(d, vmax = 4, model = "mp", time.step = 12, map = list(rho_o = factor(NA)))
+```
+```{r}
+# keep the ones that converged
+good_fits<-fit2%>%filter(converged==T & pdHess==T)
+fitids<-good_fits$id
 ```
 
-Plot of movement persistence over time and map
 
+Plots
 ```{r}
-for (i in 1:length(results)) {
-  result <- results[[i]]
+ssm_list <- split(good_fits, seq(nrow(good_fits)))
+for (i in 1:length(ssm_list)) {
+  result <- ssm_list[[i]]
 thisName <- unique(result$id)#taking name from the dataframe
   cat("doing", thisName, "\n")
   # Check if the result is valid
@@ -239,49 +638,76 @@ thisName <- unique(result$id)#taking name from the dataframe
 }
 ```
 
+problems: 
+
+
 ```{r}
-plot(results[[1]], type = 3, pages = 1, ncol = 2) # persistence estimates as a timeseries, 4 is track plot with locations coloured by persistence
+bad.fits<-c("QA43123_149087_11", "QA36853_48862_7", "NA_201299_3", "NA_201299_0", "NA_201296_1", "NA_201296_0", "K93088_96778_1", "K93087_96777_8", "K93087_96777_6", "K93085_72448_1", "_131869_1", "_131868_1", "131868_2", "_126272_4", "T7159_133762_4", "QA91767_194461_0", "QA58210_149086_3", "QA15577_45731_0", "QA81291_45771_10", "T7159_133762_7", "_126273_7", "_126272_0")
 
-plot(results[[1]], what="predicted", type = 4, pages = 0) # plot 2-d tracks of individuals
 
-plot(results[[1]], what="predicted", type = 1, pages = 1) # orange ribbon is 2xSE interval. type 2 (2-d timeseries plot of the track) doesn't work when there are NAs
-
-# predicted values are state estimates at regular time intervals, orange ellipses are 95% confidence around predicted values. 
-
-map(results[[1]],
-    pages=1,
-    what = "p", normalise=T)
-
-# behavioural estimation
-# plot movement persistence along the track of each animal as timeseries
-p1 <- plot(results[[1]],
-           type = 3,
-           pages = 1,
-           ncol = 2,
-           normalise = TRUE,
-           group = TRUE,
-           pal = "Plasma") &
-  ylim(0, 1) &
-  theme(legend.position = "none",
-        axis.text = element_text(size = 7))
-p1
+bad.fit.index<-which(good_fits$id%in%bad.fits)
+#remove
+good_fits1<-good_fits[-bad.fit.index,]
+saveRDS(good_fits1, "20240704ssm.Rds")
 ```
 
-SSM validation
 
 ```{r}
-plot(results[[1]], what='fitted') #fitted and predicted (gold) locations as 1-d timeseries over obs (blue), black x means failed to pass prefilter prior to fitting. larger errors (gold bands =2SE) occur in data gaps
-plot(results[[1]], "p", type=2, alpha=0.1) # the above viewed as 2-d tracks
+# ## fit SSM to tricky turtles
+# # ran manually to be able to increase time step or try crw model
+# results <- list() # empty list
+# 
+# thisturt<-d[d$id=="QA91767_194461_0",]# enter index of turtle id
+# thisName <- unique(thisturt$id)#taking name from the dataframe
+#   cat("doing", thisName, "\n")
+# 
+# result <- aniMotum::fit_ssm(thisturt, vmax = 3, model = "mp", time.step = 12, map = list(rho_o = factor(NA))) # can try with 24h or run crw instead of mp for poor fits
+#       best_result <- result
+#   
+#   # # visualise track
+#   plot(best_result, "p", type=2, alpha=0.1)
+#   # Store the best result
+#   results[[40]] <- best_result # enter index for turtle id
+# 
+# 
+# # #remove crw and NULL
+# # keep <- function(x) {
+# #   !is.null(x) && !(x$pmodel == "crw")
+# # }
+# 
+# # Filter the list
+# filtered_results<- Filter(keep, results)
+
+```
+Pre-filtering resulted in improved fits!
+Not enough data in some Raine post-nesting or split-up tracks
+```{r}
+# # combine with 12 hr fits
+# filtered_results<-filtered_results%>%bind_rows
+# fit<-fit%>%filter(!id%in%filtered_results)
+# 
+# ssm_output<-bind_rows(fit, filtered_results)
+# 
+# # save result
+# saveRDS(ssm_output, "20240704ssm_output.Rdata")
+```
 
 
-# checking whether items in the results list converged
-for (i in 1:length(results)) {
-  result <- results[[i]]
-thisName <- unique(result$id) #taking name from the dataframe
+
+Example SSM validation
+```{r}
+plot(ssm_list[[1]], what='fitted') #fitted and predicted (gold) locations as 1-d timeseries over obs (blue), black x failed to pass prefilter prior to fitting. larger errors (gold bands =2SE) occur in data gaps
+plot(ssm_list[[1]], "p", type=2, alpha=0.1) #viewed as 2-d tracks
+
+
+
+for (i in 1:length(ssm_list)) {
+  result <- ssm_list[[i]]
+thisName <- unique(result$id)#taking name from the dataframe
   cat("doing", thisName, "\n")
   
 
-  # Check if the result is valid by saving residual plots
+  # Check if the result is valid
   if (!result$converged=="FALSE") {
     res.rw <- osar(result)
     plot(res.rw, type = "ts") | plot(res.rw, type = "qq")+
@@ -291,21 +717,13 @@ thisName <- unique(result$id) #taking name from the dataframe
   }
 }
 ```
-
-Diagnostics are one-step ahead prediction residual, displayed as a)
-time-series, b)qq-plot and c)autocorrelation functions.
-
-a)  should show no pattern in the residuals
-b)  should show normality
-c)  shouldn't show autocorrelation.
-
-We can also compare AICc statistics of various models. However, AIC can
-be misleading for timeseries models and shouldn't be used as the sole
-criteria.
-
+Diagnostics are one-step ahead prediction residual, displayed as a) time-series, b)qq-plot and c)autocorrelation functions. 
+a) should show no pattern in the residuals
+b) should show normality
+c) shouldn't show autocorrelation
+We can also compare AICc statistics of various models. However, AIC can be misleading for timeseries models and shouldn't be used as the sole criteria. 
 ```{r}
 #res.rw$ssm[[1]]$AICc
 ```
 
-To deal with poor fit, can attempt a different kind of model (e.g. crw
-instead of rw).
+

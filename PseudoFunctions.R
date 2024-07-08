@@ -75,7 +75,8 @@ createCRW<-function(tags, tagid=tagid, n.sim = 100, reverse = FALSE){
       
       #debug plot check
       #par(mar=c(3.5, 2, 1, 1)) # margin = c(bottom, left, top, right)
-      maps::map('worldHires', xlim=c(150,152), ylim=c(-24,-23))       
+      maps::map('worldHires', xlim=c(150,152), ylim=c(-24,-23))       # Bluewhale-centric projection
+      #  map('worldHires', xlim=c(-100,5), ylim=c(18,50))         # atlantic-centric projection
       map.axes()
       lines(tag$lon, tag$lat,col='grey')                          # plot grey lines for original track
       points(sim[1,'x'],sim[1,'y'], col='blue', pch=2, cex=2)     # plot initial point like ltraj symbology
@@ -106,7 +107,7 @@ createCRW<-function(tags, tagid=tagid, n.sim = 100, reverse = FALSE){
           myvalues = raster::extract(raster_data, pt)
           
           #debug plot check
-          if (myvalues<9){ #if <9 then on water
+          if (!is.na(myvalues) && myvalues < 9) { #if <9 then on water
             # assign valid on.water location to sim data frame
             sim[j,'x'] = x
             sim[j,'y'] = y
@@ -175,6 +176,7 @@ createCRW<-function(tags, tagid=tagid, n.sim = 100, reverse = FALSE){
 
   return(sim.alltags)
 } #end function
+
 
 
 createbackgroundabsence<-function(tags, tagid=tagid, n.sim = 100){

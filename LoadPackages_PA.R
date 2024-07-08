@@ -1,3 +1,6 @@
+#install.packages(c("tidyverse", "remotes"))
+#remotes::install_github("ianjonsen/aniMotum")
+
 require(adehabitatLT) # help(package='adehabitat') # help.search('angle',package='adehabitat')
 require(maps)       # for map.where
 require(mapdata)    # for worldHires
@@ -18,7 +21,9 @@ library(caret)
 library(mlbench)
 library(dismo)
 library(gbm)
+#library(lubridate)
 library(qmap)
+#library(dplyr)
 library(Hmisc)
 require(ggplot2)
 require(ggmap)

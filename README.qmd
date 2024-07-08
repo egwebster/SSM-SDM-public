@@ -11,7 +11,7 @@ editor: visual
 The R scripts should be run in this order:
 
 1.  **prep&presences.Rmd** data filtering and state-space modelling. Calls **LoadPackages_PA.R** (adapted from Hazen et al. 2021) & raw data (available upon reasonable request from Queensland Department of Environment, Science and Innovation's Threatened Species Unit).
-2.  **Pseudoabsences.R** generate pseudo-absences (background and correlated random walk). Calls **PseudoFunctionsHPC.R** (adapted from Hazen et al. 2021).
+2.  **Pseudoabsences.R** generate pseudo-absences (background and correlated random walk). Calls **PseudoFunctions.R** (adapted from Hazen et al. 2021). Run on a containerised environment on the JCU HPC.
 3.  **AppendtoEnviroData.Rmd** workflow for appending environmental covariates to presences and pseudo-absences (see Table 1 in manuscript). Outlines steps performed manually in QGIS, and steps that call the following R scripts:
     a)  **ExtractDEAMangroves.R** append yearly distance to mangroves to presences/pseudo-absences.
     b)  **ExtractEReefsCRW.R** & **ExtractEReefsbackground.R** append daily eReefs variables to presences/pseudo-absences.
@@ -37,13 +37,47 @@ loaded via a namespace (and not attached): \[1\] gtable_0.3.4 dplyr_1.1.2 compil
 \[33\] vctrs_0.6.3 evaluate_0.23 glue_1.6.2 raster_3.6-23 codetools_0.2-19 fansi_1.0.4 colorspace_2.1-0 rmarkdown_2.24\
 \[41\] tools_4.3.1 pkgconfig_2.0.3 htmltools_0.5.6
 
+### JCU HPC information
+
+R v4.1.2u2 software is available in a singularity container.
+
+Platform: x86_64-pc-linux-gnu (64-bit)
+
+\> sessionInfo()
+
+R version 4.1.2 (2021-11-01)
+
+Platform: x86_64-pc-linux-gnu (64-bit)
+
+Running under: Ubuntu 22.04.2 LTS
+
+Matrix products: default
+
+BLAS: /usr/lib/x86_64-linux-gnu/openblas-pthread/libblas.so.3
+
+LAPACK: /usr/lib/x86_64-linux-gnu/openblas-pthread/libopenblasp-r0.3.20.so
+
+locale:
+
+\[1\] C
+
+attached base packages:
+
+\[1\] stats graphics grDevices utils datasets methods base
+
+loaded via a namespace (and not attached):
+
+\[1\] compiler_4.1.2
+
 ## Data Description
 
 ### Primary data
 
-Input for habitat model runs. Contains turtle presences (from state-space modelling) and pseudoabsences.
+Input for habitat model runs. Contains turtle presences (from state-space modelling) and pseudoabsences (background and correlated random walk).
 
-Output from prep&presences.Rmd = "20231128fit_ssm_manualALL.Rdata"
+"20240704ssm.Rds" = Presences, i.e., output from prep&presences.Rmd, estimated locations of turtles at 12 hour intervals using movement persistence models in aniMotum.
+
+"20240704ssm_24h.Rdata" = Presences, i.e., output from prep&presences.Rmd, estimated locations of turtles whose tracks did not converge at 12h intervals, at 24h intervals.
 
 Outputs from Pseudoabsences.R & AppendtoEnviroData.Rmd=
 

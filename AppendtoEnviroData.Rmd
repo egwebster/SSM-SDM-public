@@ -18,7 +18,9 @@ library(sf)
 bring in and format presences and pseudo-absences
 
 ```{r}
-presence<-read.csv("20231129SSMoutput.csv")
+# combine 12 hr and 24 hr
+presence12<-readRDS("20240704ssm.Rds")
+presences24<-readRDS("20240704ssm_24h.Rdata")
 
 # List all files in the directory
 files <- list.files("output.Predicted")

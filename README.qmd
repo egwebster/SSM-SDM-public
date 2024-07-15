@@ -14,7 +14,7 @@ The R scripts should be run in this order:
 2.  **Pseudoabsences.R** generate pseudo-absences (background and correlated random walk). Calls **PseudoFunctions.R** (adapted from Hazen et al. 2021). Run on a containerised environment on the JCU HPC.
 3.  **AppendtoEnviroData.Rmd** workflow for appending environmental covariates to presences and pseudo-absences (see Table 1 in manuscript). Outlines steps performed manually in QGIS, and steps that call the following R scripts:
     a)  **ExtractDEAMangroves.R** append yearly distance to mangroves to presences/pseudo-absences.
-    b)  **ExtractEReefsCRW.R** & **ExtractEReefsbackground.R** append daily eReefs variables to presences/pseudo-absences.
+    b)  **ExtractEReefsCRW.R** & **ExtractEReefsbackground.R** append daily eReefs variables to presences/pseudo-absences. Run on a containerised environment on the JCU HPC.
 4.  **habitatmodel.Rmd** create BRT models, quantify relative importance of environmental covariates, generate partial plots and predict to GBR grid at 2 time points.
 
 ## R software information

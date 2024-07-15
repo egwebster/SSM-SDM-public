@@ -22,9 +22,23 @@ bring in and format presences and pseudo-absences
 presence12<-readRDS("20240704ssm.Rds")
 presences24<-readRDS("20240704ssm_24h.Rdata")
 
+p12 <- grab(presence12, what = "predicted")
+p24 <- grab(presences24, what = "predicted")
+presence<-rbind(p12, p24)
+#write.csv(presence, "presence_data.csv")
+
+# compile pseudo-absences
 # List all files in the directory
-files <- list.files("output.Predicted")
-csv_files <- files[grepl("\\.csv$", files)]
+subdir<-c("../output.Predicted2024/output.Predicted2024", "../output.Predicted2024/output.Predicted2024_24h")
+
+all_files<-list()
+
+for(i in subdir){
+  files <- list.files(i, recursive=T, full.names=T)
+  all_files<-c(all_files, files)
+}
+all_files<-unlist(all_files)
+csv_files <- all_files[grepl("\\.csv$", all_files)]
 
 # Initialize an empty data frames
 crw_data <- data.frame()
@@ -37,9 +51,9 @@ for (file in csv_files) {
   tag <- gsub(".*sim_|.csv.*", "", file) #start here
   cat("doing", file, "n/")
   # Check the file name to determine the data type
-  if (grepl("^crw_sim", file)) {
+  if (grepl("crw_sim", file)) {
     data_type <- "crw"
-  } else if (grepl("^backgroundpts_sim", file)) {
+  } else if (grepl("backgroundpts_sim", file)) {
     data_type <- "background"
   } else {
     stop("Invalid file name:", file)
@@ -49,7 +63,7 @@ for (file in csv_files) {
   tag <- gsub(".*sim_|.csv.*", "", file) #start here
 
   # Read the data from the file
-  file_data <- read.csv(paste("PA-paper/output.Predicted/", file, sep=""))
+  file_data <- read.csv(file)
 
   # Add columns for data type and tag
   file_data$data_type <- data_type
@@ -63,15 +77,15 @@ for (file in csv_files) {
   }
 }
 
-#write.csv(background_data, file="background_data.csv")
-#write.csv(crw_data, file="crw_data.csv")
+# write.csv(background_data, file="background_data.csv")
+# write.csv(crw_data, file="crw_data.csv")
 ```
 
 Combine presences, crw and background data
 
 ```{r}
-crw_data<-read.csv("crw_data.csv")
-background_data<-read.csv("background_data.csv")
+# crw_data<-read.csv("crw_data.csv")
+# background_data<-read.csv("background_data.csv")
 
 presence1<-presence |> dplyr::select(c(id, lon, lat, date))
 presence1$data_type<-"track"
@@ -80,110 +94,487 @@ presence1<-presence1 |> mutate(date=as.POSIXct(date, format="%Y-%m-%d %H:%M:%S")
 
 background_data<-background_data |> 
   mutate(id=tag, date=as.POSIXct(dTime, format="%Y-%m-%d %H:%M:%S")) |> 
-  dplyr::select(!c(X,dTime, step, ID, optional, tag))
+  dplyr::select(!c(dTime, step, ID, optional, tag))
 
 crw_data<-crw_data |> 
   mutate(id=tag, lon=x, lat=y, date=as.POSIXct(t, format="%Y-%m-%d %H:%M:%S")) |> 
-  dplyr::select(!c(X,tag, flag, t, x, y))
+  dplyr::select(!c(tag, flag, t, x, y))
 
 all<-rbind(presence1, background_data, crw_data)
+#write.csv(all, "PBC.csv")
 ```
 
 # Extracting spatial and spatio-temporal environmental covariates
 
 ## Static variables
 
-1.  Sampled predictor layers (modification of source layers specified in Table 1 of the manuscript) to obtain values at presences/pseudo-absences in QGIS:
+1.  Created a mask layer from the extent of the Carter et al. dataset ("mask.tif") and clipped predictor layers to this extent for grid predictions
 
-    a)  sample raster tool for grid data
-    b)  join attributes by location tool for shapefile (categorical) data (features contain or overlap points; join type one to many)
+```{r}
+points_sf <- st_as_sf(all, coords = c("lon", "lat"), crs = 4326)  # Replace with your coordinate columns and CRS
 
-2.  Created a mask layer from the extent of the Carter et al. dataset ("mask.tif") and clipped predictor layers to this extent for grid predictions
+# Load the mask polygon from a shapefile
+mask <- st_read("../enviro datasets/mask.shp")
+```
+```{r}
+points_sf <- st_transform(points_sf, st_crs(mask))
+
+ggplot() +
+  geom_sf(data = mask, fill = "lightblue", color = "black") +  # Plot the shapefile
+  geom_sf(data = points_sf, color = "red", size = 2) +  # Plot the points
+  theme_minimal() +
+  labs(title = "Points over Shapefile",
+       subtitle = "Example Plot",
+       x = "Longitude",
+       y = "Latitude")
+```
+```{r}
+set.seed(123)
+subset<-points_sf%>%sample_n(10000)
+
+within<-st_contains(mask, subset, sparse=F)
+# Flatten the logical matrix to get indices of points contained within the mask
+contained_indices <- apply(within, 2, any)
+
+# Subset the points that are contained within the mask
+points_within_mask <- subset[contained_indices, ]
+plot(st_geometry(points_within_mask), col = 'blue', pch = 20)
+```
+```{r}
+within<-st_contains(mask, points_sf, sparse=F)
+# Flatten the logical matrix to get indices of points contained within the mask
+contained_indices <- apply(within, 2, any)
+
+# Subset the points that are contained within the mask
+points_within_mask <- points_sf[contained_indices, ]
+```
+```{r}
+# Convert to a data frame
+clipped_points_df<-as.data.frame(points_within_mask)
+
+# Extract the coordinates (longitude and latitude)
+coords <- st_coordinates(clipped_points_df$geometry)
+
+# Convert to a data frame
+coords_df <- as.data.frame(coords)
+
+# Rename columns to "longitude" and "latitude"
+names(coords_df) <- c("longitude", "latitude")
+
+# Combine with the original dataframe
+df_with_coords <- bind_cols(clipped_points_df, coords_df)
+clipped_points_df<-df_with_coords%>%select(!geometry)
+#write.csv(clipped_points_df, file="clippedpts.csv")
+```
+
+
+
+2.  Sampled predictor layers 
+
+## format shapefiles and points
+```{r}
+builtfeature<-terra::vect("../enviro datasets/breakwaters, groynes, seawalls, buffer.shp")%>%st_as_sf()
+builtfeature <- st_transform(builtfeature, st_crs(points_sf))
+builtfeature_sf<-as_Spatial(builtfeature)
+
+clipped_points_df$builtfeatures<-NA
+coordinates(clipped_points_df) <- c("longitude", "latitude")
+proj4string(clipped_points_df) <- SpatialPts@proj4string
+```
+
+```{r}
+library(parallel)
+# Calculate the number of cores (let one core be free for your Operative System)
+no_cores <- detectCores() - 1
+
+# Cut df in "n" parts
+# Higher "n": less memory requiered but slower
+# Lower "n": more memory requiered but faster
+n <- 10000
+parts <- split(x = 1:length(clipped_points_df), f = cut(1:length(clipped_points_df), n))
+cl <- makeCluster(no_cores, type = "PSOCK")
+
+# Load libraries on clusters
+clusterEvalQ(cl = cl, expr = c(library('sp')))
+
+# All the objects required to run the function
+# Objects to export to clusters
+clusterExport(cl = cl, varlist = c("builtfeature_sf", "clipped_points_df", "parts", "n"))
+
+print(cl) # summary of the cluster
+```
 
 ### Shapefiles
 
 -   built features
+```{r}
+
+
+system.time(
+
+  overParts <- parLapply(cl = cl, X = 1:n, fun = function(x) {
+    over <- over(clipped_points_df[parts[[x]],], builtfeature_sf[,"FEATURETYP"])
+    gc() # release memory
+    return(over)
+  })
+)
+
+# user  system elapsed
+# 1.050   1.150 627.111
+
+# Stop Cluster of CPU cores
+stopCluster(cl)
+
+
+# Merge df with ecoregions
+for (i in 1:n) {
+
+  message(paste("Merging part", i, "of", n))
+  clipped_points_df$builtfeatures[parts[[i]]] <- as.character(overParts[[i]]$FEATURETYP)
+
+}
+```
+
 -   geohabitat
+```{r}
+geohab<-terra::vect("../enviro datasets/qld_geohab_av/czm/pristine_ests/release/qld/shape/geohab_qld_v2.shp")%>%
+  st_as_sf()
+geohab <- st_transform(geohab, st_crs(points_sf))
+geohab_sf<-as_Spatial(geohab)
+
+clipped_points_df$geohab<-NA
+
+```
+```{r}
+cl <- makeCluster(no_cores, type = "PSOCK")
+
+# Load libraries on clusters
+clusterEvalQ(cl = cl, expr = c(library('sp')))
+
+# All the objects required to run the function
+# Objects to export to clusters
+clusterExport(cl = cl, varlist = c("geohab_sf", "clipped_points_df", "parts", "n"))
+
+system.time(
+
+  overParts <- parLapply(cl = cl, X = 1:n, fun = function(x) {
+    over <- over(clipped_points_df[parts[[x]],], geohab_sf[,"GH_TYPE"])
+    gc() # release memory
+    return(over)
+  })
+)
+# Stop Cluster of CPU cores
+stopCluster(cl)
+
+
+# Merge df with ecoregions
+for (i in 1:n) {
+
+  message(paste("Merging part", i, "of", n))
+  clipped_points_df$geohab[parts[[i]]] <- as.character(overParts[[i]]$GH_TYPE)
+
+}
+```
+
 -   geomorphology
+```{r}
+geomorph<-terra::vect("../enviro datasets/Heap2008Geomorphology.shp")%>%
+  st_as_sf()
+geomorph <- st_transform(geomorph, st_crs(points_sf))
+geomorph_sf<-as_Spatial(geomorph)
+
+clipped_points_df$geomorph<-NA
+
+```
+```{r}
+cl <- makeCluster(no_cores, type = "PSOCK")
+
+# Load libraries on clusters
+clusterEvalQ(cl = cl, expr = c(library('sp')))
+
+# All the objects required to run the function
+# Objects to export to clusters
+clusterExport(cl = cl, varlist = c("geomorph_sf", "clipped_points_df", "parts", "n"))
+
+system.time(
+
+  overParts <- parLapply(cl = cl, X = 1:n, fun = function(x) {
+    over <- over(clipped_points_df[parts[[x]],], geomorph_sf[,"feature"])
+    gc() # release memory
+    return(over)
+  })
+)
+# Stop Cluster of CPU cores
+stopCluster(cl)
+
+
+# Merge df with ecoregions
+for (i in 1:n) {
+
+  message(paste("Merging part", i, "of", n))
+  clipped_points_df$geomorph[parts[[i]]] <- as.character(overParts[[i]]$feature)
+
+}
+#saveRDS(clipped_points_df, file="20240711appendinprogress.Rds")
+```
+
 -   seagrass community type
+```{r}
+COMMUNITY<-terra::vect("../enviro datasets/NESP predicted distribution of seagrass communities/Shapefiles/GBR_NESP-TWQ-5.4_JCU_Seagrass-communities_20201203.shp")%>%
+  st_as_sf()
+COMMUNITY <- st_transform(COMMUNITY, st_crs(points_sf))
+COMMUNITY_sf<-as_Spatial(COMMUNITY)
+
+clipped_points_df$COMMUNITY<-NA
+
+```
+
+```{r}
+cl <- makeCluster(no_cores, type = "PSOCK")
+
+# Load libraries on clusters
+clusterEvalQ(cl = cl, expr = c(library('sp')))
+
+# All the objects required to run the function
+# Objects to export to clusters
+clusterExport(cl = cl, varlist = c("COMMUNITY_sf", "clipped_points_df", "parts", "n"))
+
+system.time(
+
+  overParts <- parLapply(cl = cl, X = 1:n, fun = function(x) {
+    over <- over(clipped_points_df[parts[[x]],], COMMUNITY_sf[,"COMMUNITY"])
+    gc() # release memory
+    return(over)
+  })
+)
+# Stop Cluster of CPU cores
+stopCluster(cl)
+
+
+# Merge df with ecoregions
+for (i in 1:n) {
+
+  message(paste("Merging part", i, "of", n))
+  clipped_points_df$COMMUNITY[parts[[i]]] <- as.character(overParts[[i]]$COMMUNITY)
+
+}
+```
 
 ### Rasters
 
 -   bathymetry
+```{r}
+# clipped_points_df<-readRDS("20240711appendinprogress.Rds")
+# set.seed(123)
+# subsetindices<-sample(1:nrow(clipped_points_df), 5000)
+# subset<-clipped_points_df[subsetindices,]
+# subsetvect<-terra::vect(subset)
+bathy<-terra::rast("../enviro datasets/rasters for grid predictions/bathy.tif")
+bathy <- terra::project(bathy, crs(clipped_points_df))
+
+
+# bathy1<-terra::extract(bathy, subsetvect)
+# subsetvect$bathy1<-bathy1[,2]
+
+```
+```{r}
+clipped_points_vect<-terra::vect(clipped_points_df)
+bathy1<-terra::extract(bathy, clipped_points_vect)
+clipped_points_vect$bathy1<-bathy1[,2]
+```
+
+
 -   distance to rivers
+```{r}
+dist2rivers<-terra::rast("../enviro datasets/rasters for grid predictions/dist2rivers.tif")
+
+dist2rivers<- terra::project(dist2rivers, crs(clipped_points_df))
+
+Dist2Rivers1<-terra::extract(dist2rivers, clipped_points_vect)
+clipped_points_vect$Dist2Rivers1<-Dist2Rivers1[,2]
+
+```
 -   distance to reefs
+```{r}
+dist2reefs<-terra::rast("../enviro datasets/rasters for grid predictions/dist2reefs.tif")
+
+dist2reefs<- terra::project(dist2reefs, crs(clipped_points_df))
+
+dist2reefs1<-terra::extract(dist2reefs, clipped_points_vect)
+clipped_points_vect$dist2reefs1<-dist2reefs1[,2]
+
+```
+
 -   distance to coast
+```{r}
+dist2coast<-terra::rast("../enviro datasets/rasters for grid predictions/dist2coast.tif")
+
+dist2coast<- terra::project(dist2coast, crs(clipped_points_df))
+
+dist2coast1_2<-terra::extract(dist2coast, clipped_points_vect)
+clipped_points_vect$dist2coast1_2<-dist2coast1_2[,2]
+
+```
+
 -   distance to rec boats
+```{r}
+dist2recboats<-terra::rast("../enviro datasets/rasters for grid predictions/dist2recboats.tif")
+
+dist2recboats<- terra::project(dist2recboats, crs(clipped_points_df))
+
+dist2recboatfeat<-terra::extract(dist2recboats, clipped_points_vect)
+clipped_points_vect$dist2recboatfeat<-dist2recboatfeat[,2]
+```
+
 -   seagrass probability
+```{r}
+seagrassp<-terra::rast("../enviro datasets/rasters for grid predictions/seagrassp.tif")
+
+seagrassp<- terra::project(seagrassp, crs(clipped_points_df))
+
+seagrassP1<-terra::extract(seagrassp, clipped_points_vect)
+clipped_points_vect$seagrassP1<-seagrassP1[,2]
+
+```
+
 -   relative tidal exposure
+```{r}
+tidalexposure<-terra::rast("../enviro datasets/rasters for grid predictions/tidalexposure.tif")
+
+tidalexposure<- terra::project(tidalexposure, crs(clipped_points_df))
+tidalexposure1<-terra::extract(tidalexposure, clipped_points_vect)
+clipped_points_vect$tidalexposure1<-tidalexposure1[,2]
+```
+
 -   MMP - frequency of exposure to WT1 and WT2 2003-2022
+```{r}
+mmpfrequency<-terra::rast("../enviro datasets/rasters for grid predictions/mmpfrequency.tif")
+
+mmpfrequency<- terra::project(mmpfrequency, crs(clipped_points_df))
+
+mmpfrequency1<-terra::extract(mmpfrequency, clipped_points_vect)
+clipped_points_vect$mmpfrequency1<-mmpfrequency1[,2]
+```
+
 -   MMP - longterm exposure
+```{r}
+mmpexposure<-terra::rast("../enviro datasets/rasters for grid predictions/mmpexposure.tif")
+
+mmpexposure<- terra::project(mmpexposure, crs(clipped_points_df))
+
+mmpexposure1<-terra::extract(mmpexposure, clipped_points_vect)
+clipped_points_vect$mmpexposure1<-mmpexposure1[,2]
+
+```
+
 -   ruggedness
+```{r}
+ruggedness<-terra::rast("../enviro datasets/rasters for grid predictions/ruggedness.tif")
+
+ruggedness<- terra::project(ruggedness, crs(clipped_points_df))
+
+ruggedness1<-terra::extract(ruggedness, clipped_points_vect)
+clipped_points_vect$ruggedness1<-ruggedness1[,2]
+```
+
 -   slope
+```{r}
+slope<-terra::rast("../enviro datasets/rasters for grid predictions/slope.tif")
+
+slope<- terra::project(slope, crs(clipped_points_df))
+
+slope1<-terra::extract(slope, clipped_points_vect)
+clipped_points_vect$slope1<-slope1[,2]
+```
+```{r}
+# change back into SpatialPoints
+clipped_points<-st_as_sf(clipped_points_vect)
+clipped_points_df<-as(clipped_points, "Spatial")
+#saveRDS(clipped_points_df, file="ptswrasters.Rds")
+```
+```{r}
+# clipped_points_df<-readRDS("ptswrasters.Rds")
+# convert to data frame
+clipped_df<-as.data.frame(clipped_points_df)
+
+```
+
 
 ## DEA mangrove extraction
-
 ```{r}
 #Extracted yearly raster via DEA sandbox environment
 #Filtered for values 1-4 in qgis
-#Created proximity rasters in qgis
-#Append per matching year using 
-# pts<-nas%>%mutate(date1=as.Date(aus.date))
-# clipped<-read.csv("PA-paper/crw_data.csv")
-# 
-# df2_selected<-clipped %>%
-#   rename(lat=y,
-#          lon=x,
-#          id=tag,
-#          date=t)%>%
-#   dplyr::select(id, lon, lat, data_type, iteration, date)%>%
-#   mutate(date1=as.Date(date))
-# filtered<-pts%>%
-#   left_join(df2_selected, by=c("lat", "lon", "id", "data_type", "iteration", "date1"))
-# 
-# #convert timestamp to year
-# filtered$date<-as.POSIXct(filtered$date.y, format="%Y-%m-%d %H:%M:%S")
-# filtered<-filtered |> mutate(aus.date=date+hours(10))
-# points<-filtered%>%mutate(aus.date=as.Date(aus.date))
+#Proximity rasters in qgis
+#Append per matching year:
 
-# points$year <- format(as.Date(points$aus.date), "%Y")
+#convert timestamp to year
+clipped_df<-clipped_df |> mutate(aus.date=date+hours(10))
+
+clipped_df$year <- format(as.Date(clipped_df$aus.date), "%Y")
+
+dea2010<-terra::rast(paste0("../enviro datasets/DEA mangroves/Reprojected", 2010, ".tif"))
+
+pts_sf<-st_as_sf(clipped_df, coords=c("coords.x1", "coords.x2"), crs=crs(clipped_points_df))
+pts_sf<-st_transform(pts_sf, crs=4326)
+#proj4string(pts_sf) <- CRS(dea2010)
+
+
+# plot(dea2010)
 # 
-# 
-# pts_sf<-st_as_sf(points, coords=c("lon", "lat"), crs=4326)
-# 
-# 
-# raster_list<-lapply(2010:2022, function(year) raster(paste0("enviro datasets/DEA mangroves/Reprojected", year, ".tif")))
+# # Plot sf object on top
+# plot(pts_sf, add = TRUE, col = "red", pch = 20)
+
+raster_list<-lapply(2010:2022, function(year) terra::rast(paste0("../enviro datasets/DEA mangroves/Reprojected", year, ".tif")))
 ```
+
 
 ```{r}
-# pts_sf$deamangrove<-NA
-# 
-# for(i in 1:length(raster_list)){
-#   year <- 2010 + i - 1  # Calculate the corresponding year
-#   cat("doing", year)
-#   matching<-which(pts_sf$year==year)
-#   if(length(matching)>0){
-#     # Extract raster values for matching points
-#     pts_sf[matching,]$deamangrove <- raster::extract(raster_list[[i]], st_coordinates(pts_sf[matching, ]), method='simple')
-# 
-#     # Assign extracted values to the raster_value column in points
-# 
-#   }
-# }
-```
+pts_sf$deamangrove<-NA
 
+for(i in seq_along(raster_list)){
+  year <- 2010 + i - 1  # Calculate the corresponding year
+  cat("doing", year)
+  matching<-which(pts_sf$year==year)
+  if(length(matching)>0){
+    cat("Number of matching points:", length(matching), "\n")
+     extracted_values <- terra::extract(raster_list[[i]], st_coordinates(pts_sf[matching, ]), method = 'simple')
+    
+    # Check the dimensions of the extracted values
+    if (nrow(extracted_values) == length(matching)) {
+      # Assign extracted values to the deamangrove column in pts_sf
+      pts_sf$deamangrove[matching] <- extracted_values[, 1]  # Assuming the values are in the second column
+    } else {
+      warning("Number of extracted values does not match number of points")
+    }
+  }
+}
+```
 4.eReefs: EFI, wind speed, current, salinity, Secchi depth, temperature, zooplankton N
+```{r}
+pts_df<-as.data.frame(pts_sf)
+# Extract the coordinates (longitude and latitude)
+coords <- st_coordinates(pts_df$geometry)
+
+# Convert to a data frame
+coords_df <- as.data.frame(coords)
+
+# Rename columns to "longitude" and "latitude"
+names(coords_df) <- c("lon", "lat")
+
+# Combine with the original dataframe
+df_with_coords <- bind_cols(pts_df, coords_df)
+pts_df<-df_with_coords%>%select(!geometry)
+```
 
 ```{r}
 #Query AIMS thredds server via ExtractEReefsCRW.R and ExtractEReefsbackground.R
 # break up dataset for processing
-clipped<-read.csv("20240110clippedwrasters.csv")
-track<-clipped |> filter(data_type=="track")
-#write.csv(track, "20240110trackwrasters.csv")
-crw<-clipped |> filter(data_type=="crw")
-#write.csv(crw, "20240110crwwrasters.csv")
-background<-clipped |> filter(data_type=="background")
-#write.csv(background, "20240110backgroundwrasters.csv")
+track<-pts_df |> filter(data_type=="track")
+#write.csv(track, "trackwrasters.csv")
+crw<-pts_df |> filter(data_type=="crw")
+#write.csv(crw, "crwwrasters.csv")
+background<- pts_df |> filter(data_type=="background")
+# write.csv(background, "backgroundwrasters.csv")
 ```
 
 Gluing the outputs of the eReefs query scripts back together:

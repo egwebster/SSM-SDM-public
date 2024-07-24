@@ -104,6 +104,8 @@ all<-rbind(presence1, background_data, crw_data)
 #write.csv(all, "PBC.csv")
 ```
 
+
+
 # Extracting spatial and spatio-temporal environmental covariates
 
 ## Static variables

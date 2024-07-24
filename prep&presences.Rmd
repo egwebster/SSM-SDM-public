@@ -31,7 +31,9 @@ require(patchwork)
 ```
 
 # Data pre-processing
+
 Combine ARGOS and FGPS, making sure lc is retained and data are ordered by timestamp
+
 ```{r}
 # FGPS 2021
 GPS201295<-read.csv(file="../2022-01-25_2021tags/201295-1-FastGPS.csv", header=T, skip=3)
@@ -250,12 +252,14 @@ df1 <- all %>%
 # save unfiltered data
 # write.csv(df1, file="rawFGPS&ARGOS.csv")
 ```
+
 ```{r}
 # Brought csv in to QGIS and visualised individual tracks. Removed 3 possible breeding/courtship in QGIS. When bringing DateTime field into QGIS make sure it comes in as "Date and Time" format to not lose timestamps.
 GL<-read.csv("GL_foraging_only.csv")
 ```
 
 Shoalwater and Raine data
+
 ```{r}
 ## Raine FGPS (n=8)
 GPS133762<-read.csv(file="../Raine tags/133762-9-FastGPS.csv", header=T) |> mutate(Day=dmy(Day))
@@ -354,10 +358,12 @@ RI<-RI |> arrange(id,DateTime) |> filter(!is.na(DateTime)) |> filter(!is.na(lat)
 
 #write.csv(RI, "Raine.rawFGPSARGOS.csv")
 ```
+
 ```{r}
 # # # Retain only foraging- pulled out in QGIS:
 Raine<-read.csv(file="Raine_just_foraging.csv", header=T)
 ```
+
 ```{r}
 ## Shoalwater
 # ARGOS (n=10), no data avaiable for PTTs 72448 & 88074
@@ -429,6 +435,7 @@ ArgosSh<-ArgosSh |> filter(!is.na(lat))
 
 # write.csv(Sh, file="SB.rawFGPSARGOS.csv")
 ```
+
 ```{r}
 
 # Checking for non-foraging in QGIS: 
@@ -442,8 +449,8 @@ Raine$Deploy.site<-"RI"
 GL$Deploy.site<-"GL"
 ```
 
-
 Remove first 24h
+
 ```{r}
 # Raine post-breeding tracks already removed
 # Shoalwater, removed first 24h
@@ -467,6 +474,7 @@ glimpse(GL)
 ```
 
 Combine sites and remove any empty rows
+
 ```{r}
 Raine$DateTime<-as.POSIXct(Raine$DateTime, format='%Y/%m/%d %H:%M:%S', tz="GMT")
 SB$lc<-as.character(SB$lc)
@@ -480,6 +488,7 @@ GLRISB<-GLRISB[!(GLRISB$lon== "" | is.na(GLRISB$lon)), ] # remove empty rows
 ```
 
 # SDLfilter
+
 ```{r}
 # ddfilter
 GPS<-GLRISB%>%filter(Type=="FGPS")%>%ungroup()
@@ -502,6 +511,7 @@ dup.data<-dupfilter(dd.data)
 ```
 
 # Remove points on land
+
 ```{r}
 library(raster)
 library(sp)
@@ -528,6 +538,23 @@ filtered_point_data <- all |> filter(myvalues<9)
 write.csv(filtered_point_data, file="20240704filteredFGPS&ARGOS.csv")
 ```
 
+```{r}
+#Calculate average duration per turtle
+#all<-read.csv("20240704filteredFGPS&ARGOS.csv")
+glimpse(all)
+
+a<-all%>%
+  arrange(as.Date(DateTime))%>%
+  group_by(id)%>%
+  summarise(first=first(as.Date(DateTime)), last=last(as.Date(DateTime)))%>%
+  mutate(duration=difftime(last,first,units='days'))#%>%
+  View()
+
+mean(a$duration)
+
+
+
+```
 
 ```{r}
 # # how many points per day on average 
@@ -561,18 +588,14 @@ combined20plus<-combined_split%>%group_by(id_split)%>%filter(n()>=20) |> droplev
 table(combined20plus$id_split)
 ```
 
-
 # State space models
-see https://esajournals.onlinelibrary.wiley.com/doi/full/10.1002/ecm.1470 
-State space models and flexible hierachical models- observations are imperfect measures of temporally evolving hidden states. Can be linear or non-linear and use a variety of statistical distributions. 
-Assumptions:
-1. state time series evolves as a Markov process (i.e. the state at time t, depends only on the state at the previous step t-1). 
-2. observations are independent of one another once we account for dependence on the states i.e. any dependence between observations is the result of dependence between hidden states. 
+
+see <https://esajournals.onlinelibrary.wiley.com/doi/full/10.1002/ecm.1470> State space models and flexible hierachical models- observations are imperfect measures of temporally evolving hidden states. Can be linear or non-linear and use a variety of statistical distributions. Assumptions: 1. state time series evolves as a Markov process (i.e. the state at time t, depends only on the state at the previous step t-1). 2. observations are independent of one another once we account for dependence on the states i.e. any dependence between observations is the result of dependence between hidden states.
 
 ## Fit SSM with Animotum
 
-Animotum assumes GPS data are truth - maybe this assumption is ok given that the resolution of the spatial data way exceeds the error margins of FGPS.
-Solution to this found 21/09/2023 (setting up table of sd by number of satellites). 
+Animotum assumes GPS data are truth - maybe this assumption is ok given that the resolution of the spatial data way exceeds the error margins of FGPS. Solution to this found 21/09/2023 (setting up table of sd by number of satellites).
+
 ```{r}
 ## read data, set GPS (G) to Generic Locations (GL) so user-supplied uncertainty 
 ##  estimates can be used. 
@@ -580,7 +603,6 @@ GPS4ssm <- combined20plus |> ungroup() |>
   #dplyr::select(-1) |>
   #mutate(lc = ifelse(lc == "G", "GL", lc)) # turning this off will use AniMotums defaults for GPS
 ```
-
 
 ```{r}
 
@@ -599,6 +621,7 @@ GPSerr.df <- tibble(qi = 4:11,
                                  10.67),
                         y.sd = x.sd)
 ```
+
 ```{r}
 ## merge SD's with location data
 tmp <- left_join(GPS4ssm, GPSerr.df, by = "qi") |> dplyr::select(!c(id))
@@ -609,18 +632,20 @@ ids<-unique(tmp$id_split)
 ## use aniMotum::format_data to simplify set up for fitting SSM
 d <- format_data(tmp, id="id_split", date = "DateTime", coord = c("lon","lat"))
 ```
+
 ```{r}
 # fit SSM
 fit2 <- fit_ssm(d, vmax = 4, model = "mp", time.step = 12, map = list(rho_o = factor(NA)))
 ```
+
 ```{r}
 # keep the ones that converged
 good_fits<-fit2%>%filter(converged==T & pdHess==T)
 fitids<-good_fits$id
 ```
 
-
 Plots
+
 ```{r}
 ssm_list <- split(good_fits, seq(nrow(good_fits)))
 for (i in 1:length(ssm_list)) {
@@ -638,8 +663,7 @@ thisName <- unique(result$id)#taking name from the dataframe
 }
 ```
 
-problems: 
-
+problems:
 
 ```{r}
 bad.fits<-c("QA43123_149087_11", "QA36853_48862_7", "NA_201299_3", "NA_201299_0", "NA_201296_1", "NA_201296_0", "K93088_96778_1", "K93087_96777_8", "K93087_96777_6", "K93085_72448_1", "_131869_1", "_131868_1", "131868_2", "_126272_4", "T7159_133762_4", "QA91767_194461_0", "QA58210_149086_3", "QA15577_45731_0", "QA81291_45771_10", "T7159_133762_7", "_126273_7", "_126272_0")
@@ -650,7 +674,6 @@ bad.fit.index<-which(good_fits$id%in%bad.fits)
 good_fits1<-good_fits[-bad.fit.index,]
 saveRDS(good_fits1, "20240704ssm.Rds")
 ```
-
 
 ```{r}
 # ## fit SSM to tricky turtles
@@ -679,8 +702,9 @@ saveRDS(good_fits1, "20240704ssm.Rds")
 # filtered_results<- Filter(keep, results)
 
 ```
-Pre-filtering resulted in improved fits!
-Not enough data in some Raine post-nesting or split-up tracks
+
+Pre-filtering resulted in improved fits! Not enough data in some Raine post-nesting or split-up tracks
+
 ```{r}
 # # combine with 12 hr fits
 # filtered_results<-filtered_results%>%bind_rows
@@ -692,9 +716,8 @@ Not enough data in some Raine post-nesting or split-up tracks
 # saveRDS(ssm_output, "20240704ssm_output.Rdata")
 ```
 
-
-
 Example SSM validation
+
 ```{r}
 plot(ssm_list[[1]], what='fitted') #fitted and predicted (gold) locations as 1-d timeseries over obs (blue), black x failed to pass prefilter prior to fitting. larger errors (gold bands =2SE) occur in data gaps
 plot(ssm_list[[1]], "p", type=2, alpha=0.1) #viewed as 2-d tracks
@@ -717,13 +740,9 @@ thisName <- unique(result$id)#taking name from the dataframe
   }
 }
 ```
-Diagnostics are one-step ahead prediction residual, displayed as a) time-series, b)qq-plot and c)autocorrelation functions. 
-a) should show no pattern in the residuals
-b) should show normality
-c) shouldn't show autocorrelation
-We can also compare AICc statistics of various models. However, AIC can be misleading for timeseries models and shouldn't be used as the sole criteria. 
+
+Diagnostics are one-step ahead prediction residual, displayed as a) time-series, b)qq-plot and c)autocorrelation functions. a) should show no pattern in the residuals b) should show normality c) shouldn't show autocorrelation We can also compare AICc statistics of various models. However, AIC can be misleading for timeseries models and shouldn't be used as the sole criteria.
+
 ```{r}
 #res.rw$ssm[[1]]$AICc
 ```
-
-

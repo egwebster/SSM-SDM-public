@@ -322,6 +322,8 @@ for (i in 1:n) {
 
 -   seagrass community type
 ```{r}
+#clipped_points_df<-readRDS("20240711appendinprogress.Rds")
+
 COMMUNITY<-terra::vect("../enviro datasets/NESP predicted distribution of seagrass communities/Shapefiles/GBR_NESP-TWQ-5.4_JCU_Seagrass-communities_20201203.shp")%>%
   st_as_sf()
 COMMUNITY <- st_transform(COMMUNITY, st_crs(points_sf))
@@ -332,26 +334,27 @@ clipped_points_df$COMMUNITY<-NA
 ```
 
 ```{r}
-cl <- makeCluster(no_cores, type = "PSOCK")
+# cl <- makeCluster(no_cores, type = "PSOCK")
+# 
+# # Load libraries on clusters
+# clusterEvalQ(cl = cl, expr = c(library('sp')))
+# 
+# # All the objects required to run the function
+# # Objects to export to clusters
+# clusterExport(cl = cl, varlist = c("COMMUNITY_sf", "clipped_points_df", "parts", "n"))
+# 
+# system.time(
+# 
+#   overParts <- parLapply(cl = cl, X = 1:n, fun = function(x) {
+#     over <- over(clipped_points_df[parts[[x]],], COMMUNITY_sf[,"COMMUNITY"])
+#     gc() # release memory
+#     return(over)
+#   })
+# )
+# # Stop Cluster of CPU cores
+# stopCluster(cl)
 
-# Load libraries on clusters
-clusterEvalQ(cl = cl, expr = c(library('sp')))
-
-# All the objects required to run the function
-# Objects to export to clusters
-clusterExport(cl = cl, varlist = c("COMMUNITY_sf", "clipped_points_df", "parts", "n"))
-
-system.time(
-
-  overParts <- parLapply(cl = cl, X = 1:n, fun = function(x) {
-    over <- over(clipped_points_df[parts[[x]],], COMMUNITY_sf[,"COMMUNITY"])
-    gc() # release memory
-    return(over)
-  })
-)
-# Stop Cluster of CPU cores
-stopCluster(cl)
-
+parts<-split(clipped_points_df)
 
 # Merge df with ecoregions
 for (i in 1:n) {
@@ -620,8 +623,8 @@ Gluing the outputs of the eReefs query scripts back together:
 # COMMUNITY$COMMUNITY<-as.factor(COMMUNITY$COMMUNITY)
 # y=terra::rast(COMMUNITY, resolution=common_res, extent=common_extent, crs=common_crs)
 # seagrassCom<-terra::rasterize(COMMUNITY, y, field='COMMUNITY')
-# seagrasscrop <- crop(seagrassCom, extent(extent))
-# plot(seagrasscrop)
+# #seagrasscrop <- crop(seagrassCom, extent(extent))
+# 
 # ra<-aggregate(seagrasscrop, fact=2)
 # raster::writeRaster(ra, "COMMUNITY.asc")
 # 

@@ -547,12 +547,10 @@ a<-all%>%
   arrange(as.Date(DateTime))%>%
   group_by(id)%>%
   summarise(first=first(as.Date(DateTime)), last=last(as.Date(DateTime)))%>%
-  mutate(duration=difftime(last,first,units='days'))#%>%
+  mutate(duration=difftime(last,first,units='days'))%>%
   View()
 
 mean(a$duration)
-
-
 
 ```
 

@@ -324,52 +324,42 @@ for (i in 1:n) {
 ```{r}
 #clipped_points_df<-readRDS("20240711appendinprogress.Rds")
 
-COMMUNITY<-terra::vect("../enviro datasets/NESP predicted distribution of seagrass communities/Shapefiles/GBR_NESP-TWQ-5.4_JCU_Seagrass-communities_20201203.shp")%>%
-  st_as_sf()
-COMMUNITY <- st_transform(COMMUNITY, st_crs(points_sf))
-COMMUNITY_sf<-as_Spatial(COMMUNITY)
+COMMUNITY<-terra::vect("../enviro datasets/NESP predicted distribution of seagrass communities/Shapefiles/GBR_NESP-TWQ-5.4_JCU_Seagrass-communities_20201203.shp")
+extent<-terra::ext(bathy)
+crs<-crs(bathy)
+COMMUNITY<-terra::project(COMMUNITY, crs)
+resolution=30
 
-clipped_points_df$COMMUNITY<-NA
+
+
+COMMUNITY$COMMUNITY<-as.factor(COMMUNITY$COMMUNITY)
+y=terra::rast(COMMUNITY, resolution=30, extent=extent, crs=crs(bathy))
+seagrassCom<-terra::rasterize(COMMUNITY, y, field='COMMUNITY')
+#seagrasscrop <- crop(seagrassCom, extent(extent))
+
+ra<-aggregate(seagrassCom, fact=2)
+
+image(seagrassCom)
+#raster::writeRaster(seagrassCom, "seagrassCom.asc")
 
 ```
 
 ```{r}
-# cl <- makeCluster(no_cores, type = "PSOCK")
-# 
-# # Load libraries on clusters
-# clusterEvalQ(cl = cl, expr = c(library('sp')))
-# 
-# # All the objects required to run the function
-# # Objects to export to clusters
-# clusterExport(cl = cl, varlist = c("COMMUNITY_sf", "clipped_points_df", "parts", "n"))
-# 
-# system.time(
-# 
-#   overParts <- parLapply(cl = cl, X = 1:n, fun = function(x) {
-#     over <- over(clipped_points_df[parts[[x]],], COMMUNITY_sf[,"COMMUNITY"])
-#     gc() # release memory
-#     return(over)
-#   })
-# )
-# # Stop Cluster of CPU cores
-# stopCluster(cl)
-
-parts<-split(clipped_points_df)
-
-# Merge df with ecoregions
-for (i in 1:n) {
-
-  message(paste("Merging part", i, "of", n))
-  clipped_points_df$COMMUNITY[parts[[i]]] <- as.character(overParts[[i]]$COMMUNITY)
-
-}
+clipped_points_vect<-terra::vect(clipped_points_df)
+COMMUNITY1<-terra::extract(seagrassCom, clipped_points_vect)
+clipped_points_vect$COMMUNITY<-COMMUNITY1[,2]
+```
+```{r}
+clipped_points<-st_as_sf(clipped_points_vect)
+clipped_points_df<-as(clipped_points, "Spatial")
+#saveRDS(clipped_points_df, file="20240806appendinprogress.Rds")
 ```
 
 ### Rasters
 
 -   bathymetry
 ```{r}
-# clipped_points_df<-readRDS("20240711appendinprogress.Rds")
+# clipped_points_df<-readRDS("20240806appendinprogress.Rds")
 # set.seed(123)
 # subsetindices<-sample(1:nrow(clipped_points_df), 5000)
 # subset<-clipped_points_df[subsetindices,]
@@ -716,3 +706,8 @@ for (var in variables_hydro) {
   writeRaster(r_clipped, ascii_filename, format="ascii")
 }
 ```
+```{r}
+all<-read.csv("PBC.csv")
+table(PBC$id)
+```
+

@@ -572,34 +572,76 @@ background<- pts_df |> filter(data_type=="background")
 # write.csv(background, "backgroundwrasters.csv")
 ```
 
+Run ExtractEReefs.R, ExtractEReefsbackground.R and ExtractEReefsCRW.R in HPC.
+
 Gluing the outputs of the eReefs query scripts back together:
 
 ```{r}
-# hyd4<-read.csv("hydro_4dimscrw.csv")
-# hyd3<-read.csv("hydro_3dimscrw.csv")
-# bgc4<-read.csv("bgc_4dimscrw.csv")
-# bgc3<-read.csv("bgc_3dimscrw.csv")
-# 
-# 
+hyd4<-read.csv("eReefsAppendOutputs/hydro_4dimscrw.csv")
+hyd3<-read.csv("eReefsAppendOutputs/hydro_3dimscrw1.csv")
+bgc4<-readRDS("eReefsAppendOutputs/bgc_4dimscrw1.Rds") 
+bgc3<-readRDS("eReefsAppendOutputs/bgc_3dimscrw.Rds") 
+
+track<-read.csv("eReefsAppendOutputs/bgc_3dimstrack.csv")
+background<-read.csv("eReefsAppendOutputs/bgc_3dimsbackground.csv")
+
+community<-readRDS("20240806appendinprogress.Rds")
+
+# Combine the CRW files
 # # arrange dfs by index
-# hyd4test<-hyd4%>%arrange(X.3)
+hyd4test<-hyd4%>%arrange(X)
 
 # # add in hyd3dims vars
 # 
-# hyd3vars<-hyd3%>%arrange(X.3)
-# hydtest<-cbind(hyd4test, hyd3vars[, c("mean_wspeed")])
-# 
-# # add in bgc vars
-# bgc4vars<-bgc4%>%arrange(X.3)
-# bgc3vars<-bgc3%>%arrange(X.3)
-# bgc4test<-cbind(hydtest, bgc4vars[, c("ZooL_N", "EFI")])
-# bgc3test<-cbind(bgc4test, bgc3vars[, c("Secchi")])
-# bgc3test<-bgc3test%>%rename("mean_wspeed"=`hyd3vars[, c("mean_wspeed")]`, 
-#                             "Secchi"=`bgc3vars[, c("Secchi")]`)
+hyd3vars<-hyd3%>%arrange(X)
+hydtest<-cbind(hyd4test, hyd3vars[, c("mean_wspeed")])
+
+# add in bgc vars
+bgc4vars<-bgc4%>%arrange(X)
+bgc3vars<-bgc3%>%arrange(X)
+bgc4test<-cbind(hydtest, bgc4vars[, c("ZooL_N", "EFI")])
+bgc3test<-cbind(bgc4test, bgc3vars[, c("Secchi")])
+bgc3test<-bgc3test%>%rename("mean_wspeed"=`hyd3vars[, c("mean_wspeed")]`,
+                            "Secchi"=`bgc3vars[, c("Secchi")]`)
+
+common_cols=intersect(colnames(bgc3test), colnames(track))
+AppendedAll<- rbind(bgc3test[,common_cols], track[,common_cols], background[,common_cols])
+# add in community
+clipped_df<-as.data.frame(community)
+clipped_df<-clipped_df |> mutate(aus.date=date+hours(10))
+
+clipped_df$year <- format(as.Date(clipped_df$aus.date), "%Y")
+pts_sf<-st_as_sf(clipped_df, coords=c("coords.x1", "coords.x2"), crs=crs(community))
+pts_sf<-st_transform(pts_sf, crs=4326)
+pts_df<-as.data.frame(pts_sf)
+# Extract the coordinates (longitude and latitude)
+coords <- st_coordinates(pts_df$geometry)
+
+# Convert to a data frame
+coords_df <- as.data.frame(coords)
+
+# Rename columns to "longitude" and "latitude"
+names(coords_df) <- c("lon", "lat")
+
+# Combine with the original dataframe
+df_with_coords <- bind_cols(pts_df, coords_df)
+pts_df<-df_with_coords%>%select(!geometry)
+pts_df$date<-as.character(pts_df$date)
+pts_df$aus.date<-as.character(pts_df$aus.date)
+pts_df$year<-as.integer(pts_df$year)
+
+
+common_cols<-intersect(names(AppendedAll), names(pts_df))
+
+pts_df1<-pts_df%>%arrange(id, date, data_type, iteration, builtfeatures, geohab, geomorph, aus.date, year, lon, lat)
+AppendedAll1<-AppendedAll%>%
+  arrange(id, date, data_type, iteration, builtfeatures, geohab, geomorph, aus.date, year, lon, lat)%>%
+  mutate(COMMUNITY=pts_df1$COMMUNITY)
+
+
 # # save this 
-# write.csv(bgc3test, "20240304crw.csv")
-# Clipped to seagrass raster data- resulting in:
-# crw<-read.csv("20240304crwwrug.csv")
+# write.csv(AppendedAll1, "20240806AppendedAll.csv")
+
 ```
 
 ########################################## 

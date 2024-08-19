@@ -9,138 +9,66 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r}
-source("PA-paper/LoadPackages_PA.R")
+source("LoadPackages_PA.R")
 library(sf)
 ```
 
 
 ```{r}
-track1<-read.csv("track.csv")
+AppendedAll<-read.csv("20240806AppendedAll.csv")
 #remove spatial/temporal where there is too much missing predictor data (eReefs BGC goes until 2019 only)
-track1%>%arrange(date)%>%visdat::vis_miss()
-#background%>%slice_sample(prop=0.2)%>%arrange(date)%>%visdat::vis_miss()
-track_filtered<-track1%>%filter(!is.na(Secchi))%>%filter(!is.na(date))
+AppendedAll%>%arrange(date)%>%slice_sample(n=50000)%>%visdat::vis_miss(warn_large_data = F)
+filtered<-AppendedAll%>%filter(!is.na(Secchi))%>%filter(!is.na(date))
 
-crw<-read.csv("crw.csv")
-crw%>%arrange(date)%>%visdat::vis_miss()
-crw_filtered<-crw%>%filter(!is.na(Secchi))
-
-background<-read.csv("background.csv")
-background_filtered<-background%>%filter(!is.na(Secchi))%>%dplyr::select(!X.6)%>%filter(!is.na(date))
-
-
-common_cols<-intersect(colnames(track_filtered), colnames(nas))
-
-data.background<-rbind(
-  subset(background_filtered, select=common_cols),
-  subset(track_filtered, select=common_cols),
-  subset(nas, select=common_cols))%>%
-    dplyr::select(!c(X.3, X.2, X.1, X))%>%
+background<-filtered%>%
+    dplyr::select(!c(X.2, X.1, X))%>%
   mutate(COMMUNITY=factor(COMMUNITY),
-         builtfeature=factor(builtfeature),
+         builtfeature=factor(builtfeatures),
          geohab=factor(geohab),
-         recboating=factor(recboating),
-         marina=factor(marina),
          geomorph=factor(geomorph),
          dist2coast=dist2coast1_2)%>%
+  filter(data_type!="crw")%>%
+  mutate(data_type=ifelse(data_type=="track", 1, 0))
+
+crw<-filtered%>%
+    dplyr::select(!c(X.2, X.1, X))%>%
+  mutate(COMMUNITY=factor(COMMUNITY),
+         builtfeature=factor(builtfeatures),
+         geohab=factor(geohab),
+         geomorph=factor(geomorph),
+         dist2coast=dist2coast1_2)%>%
+  filter(data_type!="background")%>%
   mutate(data_type=ifelse(data_type=="track", 1, 0))
 ```
 
-
-
-
 ```{r}
 # separate GL and unmodified turtles
-# library(readxl)
-# metadata<-read.csv("tracked.turtls.csv")
-# glimpse(metadata)
-# 
-# crw_filtered$PTT<-as.numeric(gsub(".*_([0-9]+)_.+", "\\1", crw_filtered$id))
-# # Animals who were incorrecly re-assigned ids based on PTT
-# #_96777 is everything after 2014 currently named QA46109_96777
-# #QA64318_133758 is everything after 2017 currently named QA33394_133758
-# crw<-crw_filtered%>%mutate(id=ifelse(PTT=="96777" & as.Date(date)>as.Date("2014-01-01"), paste("", gsub("^.*?(_)", "\\1", id), sep=""), id),
-#                 id=ifelse(PTT=="133758"& as.Date(date)>as.Date("2017-01-01"), paste("QA64318", gsub("^.*?(_)", "\\1", id), sep=""), id))
-# crw$Primary.tag<-gsub("^([^_]*)_.*$", "\\1", crw$id)
-# 
-# 
-# 
-# metadata<-metadata%>%select(c(PTT, Primary.tag, Deploy.site, Year, Sex, Maturity, CCL))
-# 
-# crw<-crw%>%left_join(metadata, by=c("PTT", "Primary.tag"))
-# crw<-crw%>%mutate(Sex=factor(Sex), 
-#                               Maturity=factor(Maturity))
 
+metadata<-read.csv("tracked.turtls.csv")
+# glimpse(metadata)
+
+
+metadata$ID<-paste(metadata$Primary.tag, metadata$PTT, sep="_")
+metadata<-metadata%>%select(c(ID, Deploy.site, Sex, Maturity, CCL))
+crw$ID<-sub("_[^_]*$", "", crw$id)
+background$ID<-sub("_[^_]*$", "", background$id)
+
+crw<-crw%>%left_join(metadata, by="ID")
+crw<-crw%>%mutate(Sex=factor(Sex), Maturity=factor(Maturity))
+
+background<-background%>%left_join(metadata, by="ID")
+background<-background%>%mutate(Sex=factor(Sex), Maturity=factor(Maturity))
 
 ```
 
 ```{r}
-# 
-# 
-# # animals incorrectly assigned based on PTT
-# data.background$PTT<-as.numeric(gsub(".*_([0-9]+)_.+", "\\1", data.background$id))
-# data.background<-data.background%>%mutate(id=ifelse(PTT=="96777" & as.Date(date.x)>as.Date("2014-01-01"), paste("", gsub("^.*?(_)", "\\1", id), sep=""), id),
-#                 id=ifelse(PTT=="133758"& as.Date(date.x)>as.Date("2017-01-01"), paste("QA64318", gsub("^.*?(_)", "\\1", id), sep=""), id))
-# 
-# 
-# data.background$Primary.tag<-gsub("^([^_]*)_.*$", "\\1", data.background$id)
-# #data.background$date<-as.POSIXct(data.background$date, format="%Y-%m-%d %H:%M:%S")
-# 
-# 
-# 
-# metadata<-metadata%>%dplyr::select(c(PTT, Primary.tag, Deploy.site, Year, Sex, Maturity, CCL))
-# 
-# data_join_b<-data.background%>%left_join(metadata, by=c("PTT", "Primary.tag"))
-# data_join_b<-data_join_b%>%mutate(Sex=factor(Sex), 
-#                               Maturity=factor(Maturity))%>%ungroup()
+data_join_b<-background
 
-#write.csv(data_join_b, file="20240219data.background.csv")
-# appended slope and ruggedness here, and clipped to seagrass mask
-data_join_b<-read.csv("enviro datasets/20240222backgrounddata_clipped.csv")
-# track<-data_join_b%>%filter(data_type=="true")
 
-data_join_b$data_type<-ifelse(data_join_b$data_type=="false", 0, 1)
-data_join_b<-data_join_b%>%mutate(COMMUNITY=factor(COMMUNITY), 
-                                    builtfeature=factor(builtfeature),
-                                    geohab=factor(geohab),
-                                    geomorph=factor(geomorph))
-data.background<-data_join_b
 GL_b<-data_join_b%>%filter(Deploy.site=="GL")
 unmodified_b<-data_join_b%>%filter(!Deploy.site%in%c("GL"))
 
-# crw<-crw%>%select(!c(field_1, X.3, X.2, X.1, X))%>%
-#   mutate(data_type="false")%>%
-#   rename(dist2coast=dist2coast21)
-# common_cols<-intersect(colnames(track), colnames(crw))
-# 
-# data_join<-rbind(
-#   subset(crw, select=common_cols),
-#   subset(track, select=common_cols))%>%
-#   mutate(COMMUNITY=factor(COMMUNITY),
-#          builtfeature=factor(builtfeature),
-#          geohab=factor(geohab),
-#          recboating=factor(recboating),
-#          marina=factor(marina),
-#          geomorph=factor(geomorph))%>%
-#   mutate(data_type=ifelse(data_type=="true", 1, 0))
-# write.csv(data_join, "20240304data.crw.csv")
-# last?! run from hpc:
-# crw<-read.csv("hydro_3dimscrw.csv")%>%select(!X.1)
-# 
-# #crw.sub<-crw%>%select(c(id, lon, lat, data_type, iteration, mean_wspeed, date, aus.date))
-# 
-# data_join<-read.csv("20240304data.crw.csv")%>%filter(data_type==1)
-# 
-# 
-# data_join<-rbind(data_join, crw)
-# write.csv(data_join, "20240309data.crw.csv")
-data_join<-read.csv("20240309data.crw.csv")
-
-data_join<-data_join%>%mutate(COMMUNITY=factor(COMMUNITY), 
-                                    builtfeature=factor(builtfeature),
-                                    geohab=factor(geohab),
-                                    geomorph=factor(geomorph))%>%
-  select(!X)
+data_join<-crw
 
 GL<-data_join%>%filter(Deploy.site=="GL")
 unmodified<-data_join%>%filter(!Deploy.site%in%c("GL"))
@@ -184,7 +112,7 @@ test_dataunmodified_b <- unmodified_b[-splitIndexunmodified_b, ]
 correlation matrix
 ```{r}
 data.num<-select_if(data_join, is.numeric)# include only numeric
-data4cor<-data.num[,c(5:7,9:24, 28:29)]
+data4cor<-data.num[,c(3:14, 16, 19:21, 24:29)]
 corr<-cor(data4cor, method='pearson', use='pairwise.complete.obs')
 round(corr, 3)
 # extract pairs with 0.7 coeficient or higher
@@ -193,10 +121,7 @@ w <- which(abs(corr)>=0.7 & row(corr)<col(corr), arr.ind=TRUE)
 high_cor <- matrix(colnames(corr)[w],ncol=2)
 high_cor
 ```
-dist2recboats, dist2rivers, deamangrove
-bathy, mmpexp, mmpfreq, Secchi, deamangrove, dist2coast
-u, v
-ruggedness,slope
+
 ```{r}
 data.num<-select_if(data_join_b, is.numeric)# include only numeric
 data4cor<-data.num[,c(5:7,9:29)]
@@ -223,41 +148,6 @@ data_join%>%arrange(ruggedness1)%>%
   geom_point(aes(y=mean_binom, x=mean_var))
 ```
 dist2recboatfeat- 0
-dist2rivers- 0
-bathy- -1
-dist2coast- -1
-dist2reefs- -1
-seagrass- 0
-tidalexposure-0 
-mmpexposure-0
-mmpfrequency 1
-salt 0
-temp 0
-mean_cur 0
-u 0
-v 0
-mean_wspped 0
-wspeed_u -1
-wspeed_v -1
-Zool_N 0
-EFI 0
-Secchi 0
-deamangroves -1
-slope -1
-ruggedness -1
-
-```{r}
-# plotting relationship of each predictor with response to inform var.monotone
-data_join_b%>%arrange(slope1)%>%
-  mutate(group=ceiling(row_number()/100))%>%
-  group_by(group)%>%
-  summarise(mean_binom=mean(dist2recboatfeat), 
-            mean_var=mean(slope1))%>%
-  ggplot()+
-  geom_point(aes(y=mean_binom, x=mean_var))
-```
-
-dist2recboatfeat- -1
 dist2rivers- -1
 bathy- -1
 dist2coast- -1
@@ -271,15 +161,50 @@ temp 0
 mean_cur 0
 u 0
 v 0
-mean_wspped -1
+mean_wspped 0
 wspeed_u -1
 wspeed_v -1
 Zool_N 0
 EFI 0
 Secchi 0
-deamangroves -1
+deamangroves 0
 slope -1
 ruggedness -1
+
+```{r}
+# plotting relationship of each iredictor with response to inform var.monotone
+data_join_b%>%arrange(dist2recboatfeat)%>%
+  mutate(group=ceiling(row_number()/100))%>%
+  group_by(group)%>%
+  summarise(mean_binom=mean(dist2recboatfeat), 
+            mean_var=mean(slope1))%>%
+  ggplot()+
+  geom_point(aes(y=mean_binom, x=mean_var))
+```
+
+dist2recboatfeat- 1
+dist2rivers- 1
+bathy- -1
+dist2coast- 0
+dist2reefs- 0
+seagrass- 0
+tidalexposure-0 
+mmpexposure-0
+mmpfrequency 0
+salt 0
+temp 0
+mean_cur 0
+u 0
+v 0
+mean_wspped 1
+wspeed_u -1
+wspeed_v -1
+Zool_N 1
+EFI 1
+Secchi 1
+deamangroves 1
+slope 0
+ruggedness 0
 
 
 ```{r}
@@ -288,10 +213,10 @@ ruggedness -1
 #brt, gradient boosted models
 
 try(BRT.crw<-gbm.fixed(data=train_data, 
-                       gbm.x=c(6:8, 10, 12:13,15:19, 22:24,27:33,41:42), 
-                       gbm.y=4, 
+                       gbm.x=c(6:9, 11:19, 22, 25:27, 30:34), 
+                       gbm.y=3, 
                        family="bernoulli",
-                       var.monotone=c(0,0,0,0,0,-1,-1,0,0,0,1,0,0,0,0,0,0,0,0,-1,-1,-1,-1), # dist 2 coast has max values at coast
+                       var.monotone=c(0,0,-1,-1,-1,-1,0,0,0,0,0,-1,-1,0,0,0,0,0,0,0,0,0), # dist 2 coast has max values at coast
                        tree.complexity=5, 
                        learning.rate = 0.005, 
                        n.trees = 9000, 
@@ -299,41 +224,38 @@ try(BRT.crw<-gbm.fixed(data=train_data,
 
 
 #brtgl?
-train_dataGL<-train_dataGL%>%select(!X.1)
 try(BRT.crwGL<-gbm.fixed(data=train_dataGL, 
-                       gbm.x=c(6:8, 10, 12:13,15:19, 22:24,27:33,41:42), 
-                       gbm.y=4, 
+                       gbm.x=c(6:9, 11:19, 22, 25:27, 30:34), 
+                       gbm.y=3, 
                        family="bernoulli",
-                       var.monotone=c(0,0,0,0,0,-1,-1,0,0,0,1,0,0,0,0,0,0,0,0,-1,-1,-1,-1),
+                       var.monotone=c(0,0,-1,-1,-1,-1,0,0,0,0,0,-1,-1,0,0,0,0,0,0,0,0,0),
                        tree.complexity=5, 
                        learning.rate = 0.005, 
                        n.trees = 9000, 
                        bag.fraction=0.75)) 
 #brtunmodified
 try(BRT.crwunmod<-gbm.fixed(data=train_dataunmodified, 
-                       gbm.x=c(6:8, 10, 12:13,15:19, 22:24,27:33,41:42), 
-                       gbm.y=4, 
+                       gbm.x=c(6:9, 11:19, 22, 25:27, 30:34), 
+                       gbm.y=3, 
                        family="bernoulli",
-                       var.monotone=c(0,0,0,0,0,-1,-1,0,0,0,1,0,0,0,0,0,0,0,0,-1,-1,-1,-1),
+                       var.monotone=c(0,0,-1,-1,-1,-1,0,0,0,0,0,-1,-1,0,0,0,0,0,0,0,0,0),
                        tree.complexity=5, 
                        learning.rate = 0.005, 
                        n.trees = 9000, 
                        bag.fraction=0.75))
 saveRDS(BRT.crw, "BRT.crw.Rds")
-saveRDS(BRT.crwGL, "BRT.crwGL1.Rds")
+saveRDS(BRT.crwGL, "BRT.crwGL.Rds")
 saveRDS(BRT.crwunmod, "BRT.crwunmod.Rds")
 
 ```
 ```{r}
-
-
 # models with background sampling
 try(BRT.background1<-gbm.fixed(data=as.data.frame(train_data_b), 
-                       gbm.x=c(8:10, 12,14:15, 17:21,24:26, 29,32:37,46:47), 
-                       gbm.y=6, 
+                       gbm.x=c(6:9, 11:19, 22, 25:27, 30:34), 
+                       gbm.y=3, 
                        family="bernoulli",
                        var.monotone=
-                         c(0,0,0,-1,-1,-1,-1,0,0,0,0,0,0,0,-1,0,0,0,0,-1,-1, -1,-1), 
+                         c(0,0,-1,-1,0,0,-1,0,0,0,0,0,0,1,0,0,0,1,1,1,1,0), 
                        tree.complexity=5, 
                        learning.rate = 0.005, 
                        n.trees = 2000, 
@@ -342,22 +264,22 @@ try(BRT.background1<-gbm.fixed(data=as.data.frame(train_data_b),
 
 #brtgl?
 try(BRT.backgroundGL<-gbm.fixed(data=as.data.frame(train_dataGL_b), 
-                       gbm.x=c(8:10, 12,14:15, 17:21,24:26, 29,32:37,46:47), 
-                       gbm.y=6, 
+                       gbm.x=c(6:9, 11:19, 22, 25:27, 30:34), 
+                       gbm.y=3, 
                        family="bernoulli",
                        var.monotone=
-                         c(0,0,0,-1,-1,-1,-1,0,0,0,0,0,0,0,-1,0,0,0,0,-1,-1, -1,-1), 
+                         c(0,0,-1,-1,0,0,-1,0,0,0,0,0,0,1,0,0,0,1,1,1,1,0), 
                        tree.complexity=5, 
                        learning.rate = 0.005, 
                        n.trees = 2000, 
                        bag.fraction=0.75)) 
 #brtunmodified
 try(BRT.backgroundunmod<-gbm.fixed(data=as.data.frame(train_dataunmodified_b), 
-                       gbm.x=c(8:10, 12,14:15, 17:21,24:26, 29,32:37,46:47), 
-                       gbm.y=6,  
+                       gbm.x=c(6:9, 11:19, 22, 25:27, 30:34), 
+                       gbm.y=3,  
                        family="bernoulli",
                        var.monotone=
-                         c(0,0,0,-1,-1,-1,-1,0,0,0,0,0,0,0,-1,0,0,0,0,-1,-1, -1,-1), 
+                         c(0,0,-1,-1,0,0,-1,0,0,0,0,0,0,1,0,0,0,1,1,1,1,0), 
                        tree.complexity=5, 
                        learning.rate = 0.005, 
                        n.trees = 2000, 
@@ -370,12 +292,12 @@ saveRDS(BRT.backgroundunmod, "BRT.backgroundunmod.Rds")
 
 
 
-## load pre-run mods 25/01/2024
+## load pre-run mods 
 ```{r}
 BRT.crw<-readRDS("BRT.crw.Rds")
 BRT.crwGL<-readRDS("BRT.crwGL.Rds")
 BRT.crwunmod<-readRDS("BRT.crwunmod.Rds")
-#test<-readRDS("BRT.crwGL1.Rds")
+
 
 BRT.background1<-readRDS("BRT.background1.Rds")
 BRT.backgroundGL<-readRDS("BRT.backgroundGL.Rds")
@@ -411,19 +333,16 @@ sorted
 
 ```{r}
 # GL vs unmod
-summary(BRT.crwGL, n.trees=best.iterGL) #Zoo, temp, salt, rec boats
-summary(BRT.crwunmod, n.trees=best.iterunmod) #dist2 coast, seagrass, dist2 rivers, rec boats (not Zoo)
+summary(BRT.crwGL, n.trees=best.iterGL) #rec boats, community, ZooL_N, temp, mangroves, salt
+summary(BRT.crwunmod, n.trees=best.iterunmod) #rec boats, reefs, current, rivers, salt, mmpfrequ
 ```
 ```{r}
 b<-summary(BRT.background1, n.trees=best.iterb)
 GLb<-summary(BRT.backgroundGL, n.trees=best.iterGLb)
 unmodb<-summary(BRT.backgroundunmod, n.trees=best.iterunmodb)
-c<-summary(BRT.crw, n.trees=best.iter)%>%
-  mutate(var=ifelse(var=="dist2coast", "dist2coast1_2", var))
-GLc<-summary(BRT.crwGL, n.trees=best.iterGL)%>%
-  mutate(var=ifelse(var=="dist2coast", "dist2coast1_2", var))
-unmodc<-summary(BRT.crwunmod, n.trees=best.iterunmod)%>%
-  mutate(var=ifelse(var=="dist2coast", "dist2coast1_2", var))
+c<-summary(BRT.crw, n.trees=best.iter)
+GLc<-summary(BRT.crwGL, n.trees=best.iterGL)
+unmodc<-summary(BRT.crwunmod, n.trees=best.iterunmod)
 
 combined_df<-reduce(list(b, GLb, unmodb, c, GLc, unmodc), full_join, by="var")
 b.df<-combined_df%>%
@@ -437,7 +356,7 @@ b.df
 
 # rename stuff for plotting
 names(b.df)[names(b.df)=="var"]<-"Variable"
-b.df$"Variable"<-c("Bathymetry", "Built features", "Seagrass community type", "Distance to mangroves", "Distance to coast", "Distance to boat ramps", "Distance to reefs", "Distance to rivers", "Ecology fine inorganics", "Geohabitat", "Geomorphology", "Mean seawater velocity", "Mean wind speed", "Chronic exposure to floodwater", "Acute flood frequency", "Ruggedness", "Salinity", "Seagrass probability", "Secchi depth", "Slope", "Temperature", "Tidal exposure", "Large zooplankton nitrogen")
+b.df$"Variable"<-c("Bathymetry", "Seagrass community type", "Distance to mangroves", "Distance to coast", "Distance to boat ramps", "Distance to reefs", "Distance to rivers", "Ecology fine inorganics", "Geohabitat", "Geomorphology", "Mean seawater velocity", "Mean wind speed", "Chronic exposure to floodwater", "Acute flood frequency", "Ruggedness", "Salinity", "Seagrass probability", "Secchi depth", "Slope", "Temperature", "Tidal exposure", "Large zooplankton nitrogen")
 ```
 
 
@@ -470,17 +389,17 @@ Evaluations_7525 <- as.data.frame(matrix(data=0,nrow=1,ncol=3))
   
 (Evaluations_7525)
 eval<-c(names(Evaluations_7525), "% deviance explained")
-b.df[24:27,1]<-eval
-b.df[24,5]<-Evaluations_7525[,1]
-b.df[25,5]<-Evaluations_7525[,2]
-b.df[26,5]<-Evaluations_7525[,3]
+b.df[23:26,1]<-eval
+b.df[23,5]<-Evaluations_7525[,1]
+b.df[24,5]<-Evaluations_7525[,2]
+b.df[25,5]<-Evaluations_7525[,3]
 ```
 AUC of 0.5 means the model is just as good as a random guess. AUC varies with spatial extent used to select background points. Larger extent, higher AUC. 
 
 # Deviance explained - explanatory power
 ```{r}
 x<-(BRT.crw$self.statistics$null.deviance-BRT.crw$self.statistics$resid.deviance)/BRT.crw$self.statistics$null.deviance
-b.df[27,5]<-x
+b.df[26,5]<-x
 ```
 GL and unmod diagnostics
 ```{r}
@@ -499,9 +418,9 @@ Evaluations_7525GL <- as.data.frame(matrix(data=0,nrow=1,ncol=3))
   Evaluations_7525GL[1,3] <- mean(e@TPR)
   
 (Evaluations_7525GL)
-b.df[24,6]<-Evaluations_7525GL[,1]
-b.df[25,6]<-Evaluations_7525GL[,2]
-b.df[26,6]<-Evaluations_7525GL[,3]
+b.df[23,6]<-Evaluations_7525GL[,1]
+b.df[24,6]<-Evaluations_7525GL[,2]
+b.df[25,6]<-Evaluations_7525GL[,3]
   
 Evaluations_7525unmod <- as.data.frame(matrix(data=0,nrow=1,ncol=3))
   colnames(Evaluations_7525unmod) <- c("AUC","TSS","TPR")
@@ -516,18 +435,18 @@ Evaluations_7525unmod <- as.data.frame(matrix(data=0,nrow=1,ncol=3))
   Evaluations_7525unmod[1,3] <- mean(e@TPR)
   
 (Evaluations_7525unmod)
-b.df[24,7]<-Evaluations_7525unmod[,1]
-b.df[25,7]<-Evaluations_7525unmod[,2]
-b.df[26,7]<-Evaluations_7525unmod[,3]
+b.df[23,7]<-Evaluations_7525unmod[,1]
+b.df[24,7]<-Evaluations_7525unmod[,2]
+b.df[25,7]<-Evaluations_7525unmod[,3]
 ```
 ```{r}
 #GL
 y<-(BRT.crwGL$self.statistics$null.deviance-BRT.crwGL$self.statistics$resid.deviance)/BRT.crwGL$self.statistics$null.deviance
-b.df[27,6]<-y
+b.df[26,6]<-y
 
 #unmod
 z<-(BRT.crwunmod$self.statistics$null.deviance-BRT.crwunmod$self.statistics$resid.deviance)/BRT.crwunmod$self.statistics$null.deviance
-b.df[27,7]<-z
+b.df[26,7]<-z
 ```
 
 
@@ -559,10 +478,10 @@ Evaluations_7525 <- as.data.frame(matrix(data=0,nrow=1,ncol=3))
 (Evaluations_7525)
 transposed<-t(Evaluations_7525)
 #eval<-c(names(Evaluations_7525), "% deviance explained")
-b.df[24:27,1]<-eval
-b.df[24,2]<-Evaluations_7525[,1]
-b.df[25,2]<-Evaluations_7525[,2]
-b.df[26,2]<-Evaluations_7525[,3]
+b.df[23:26,1]<-eval
+b.df[23,2]<-Evaluations_7525[,1]
+b.df[24,2]<-Evaluations_7525[,2]
+b.df[25,2]<-Evaluations_7525[,3]
 ```
 AUC of 0.5 means the model is just as good as a random guess. AUC varies with spatial extent used to select background points. Larger extent, higher AUC. 
 TSS= true skill statistic
@@ -571,7 +490,7 @@ TPR= true presence rate, correctly predicted presence observations over total pr
 # Deviance explained - explanatory power
 ```{r}
 a<-(BRT.background1$self.statistics$null.deviance-BRT.background1$self.statistics$resid.deviance)/BRT.background1$self.statistics$null.deviance
-b.df[27,2]<-a
+b.df[26,2]<-a
 ```
 GL and unmod diagnostics
 ```{r}
@@ -590,9 +509,9 @@ Evaluations_7525GL <- as.data.frame(matrix(data=0,nrow=1,ncol=3))
   Evaluations_7525GL[1,3] <- mean(e@TPR)
   
 (Evaluations_7525GL)
-b.df[24,3]<-Evaluations_7525GL[,1]
-b.df[25,3]<-Evaluations_7525GL[,2]
-b.df[26,3]<-Evaluations_7525GL[,3]
+b.df[23,3]<-Evaluations_7525GL[,1]
+b.df[24,3]<-Evaluations_7525GL[,2]
+b.df[25,3]<-Evaluations_7525GL[,3]
 ```
 ```{r}
 Evaluations_7525unmod <- as.data.frame(matrix(data=0,nrow=1,ncol=3))
@@ -608,9 +527,9 @@ Evaluations_7525unmod <- as.data.frame(matrix(data=0,nrow=1,ncol=3))
   Evaluations_7525unmod[1,3] <- mean(e@TPR)
   
 (Evaluations_7525unmod)
-b.df[24,4]<-Evaluations_7525unmod[,1]
-b.df[25,4]<-Evaluations_7525unmod[,2]
-b.df[26,4]<-Evaluations_7525unmod[,3]
+b.df[23,4]<-Evaluations_7525unmod[,1]
+b.df[24,4]<-Evaluations_7525unmod[,2]
+b.df[25,4]<-Evaluations_7525unmod[,3]
 ```
 ```{r}
 #GL
@@ -618,8 +537,8 @@ b<-(BRT.backgroundGL$self.statistics$null.deviance-BRT.backgroundGL$self.statist
 
 #unmod
 c<-(BRT.backgroundunmod$self.statistics$null.deviance-BRT.backgroundunmod$self.statistics$resid.deviance)/BRT.backgroundunmod$self.statistics$null.deviance
-b.df[27,3]<-b
-b.df[27,4]<-c
+b.df[26,3]<-b
+b.df[26,4]<-c
 ```
 
 
@@ -627,7 +546,7 @@ b.df[27,4]<-c
 ```{r}
 library(gt)
 library(webshot2)
-threshold<-100/27
+threshold<-100/22
 
 # Ensure columns are numeric and handle NAs
 b.df[, c("background_all", "background_modified", "background_unmodified", "crw_all", "crw_modified", "crw_unmodified")] <- 
@@ -690,7 +609,7 @@ gt_table <- b.df %>%
     delim = "_"
 )
 gt_table
-gtsave(gt_table, filename="rel.importance.png")
+gtsave(gt_table, filename="rel.importance.png", expand=12)
 ```
 # Legend
 ```{r}
@@ -725,38 +644,12 @@ yhat
 ```{r}
 
 nms <- colnames(train_data_b)
-p <- vector('list', 6)
-names(p) <- nms[c(19, 20, 7, 15, 11, 32)] #change these according to model rank list
-for (nm in nms[c(19, 20, 7, 15, 11, 32)]) {
-  print(nm)
-  p[[nm]] <- BRT.background1 %>% pdp::partial(pred.var=nm,
-                                 n.trees=best.iterb,
-                                 train=train_data_b,
-                                 inv.link=plogis,
-                                 recursive=FALSE,
-                                 type='regression') %>%
-    autoplot() + ylim(0, 1)
-}
- 
-do.call('grid.arrange', p)
-```
-```{r}
-BRT.backgroundGL |> 
-  pdp::partial(pred.var='mmpexposure1', #tell it what variable
-               n.trees=best.iterb, #how many trees to cull after
-               train=train_data_b,
-               # inv.link=plogis,
-               # recursive=F,
-               type='regression'
-               #prob=T
-               #recursive=F, #fast approximation that only works for gaussian loss. If we didn't use gaussian, this can't be false.
-               ) |> 
-  autoplot()
+new_x_labels <- c("Distance to boat ramps", "Ecology fine inorganics", "Acute flood frequency")
 
-nms <- colnames(train_data_b)
-p <- vector('list', 5)
-names(p) <- nms[c(8,12,33,20,37)] #change these according to model rank list
-for (nm in nms[c(8,12,33,20,37)]) {
+p <- vector('list', 3)
+names(p) <- nms[c(13,32,17)] #change these according to model rank list
+for (j in seq_along(nms[c(13,32,17)])) {
+  nm <- nms[c(13,32,17)][j]
   print(nm)
   p[[nm]] <- BRT.backgroundGL %>% pdp::partial(pred.var=nm,
                                  n.trees=best.iterGLb,
@@ -764,11 +657,28 @@ for (nm in nms[c(8,12,33,20,37)]) {
                                  # inv.link=plogis,
                                  # recursive=FALSE,
                                  type='regression') %>%
-    autoplot()+theme_classic()  #+ ylim(0, 1)
+    autoplot()+theme_classic() +
+    labs(x=new_x_labels[j])
+  
+  if (nm == "COMMUNITY") { # Rotate x-axis tick labels in the first panel
+    p[[nm]] <- p[[nm]] + theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+                                 scale_x_discrete(labels = function(x) {
+        x[x == "Non-seagrass habitat"] <- "NSG"
+        return(x)
+      })
+  }
+ #+ ylim(0, 1)
 }
- 
+
 plot<-do.call('grid.arrange', p)
-plot
+
+library(grid)
+title <- textGrob("A- Background, modified", x = unit(0, "npc"), just = "left", gp = gpar(fontsize = 16))
+
+# Combine the title and the plot
+final_plot <- arrangeGrob(plot, top = title)
+final_plot
+ggsave("backgroundGL.partial.png", final_plot, width=8, height=6)
 # which categories best predict presence
 pdp_df <- BRT.backgroundGL %>% pdp::partial(pred.var='COMMUNITY',
                                  n.trees=best.iterGLb,
@@ -785,9 +695,12 @@ print(sorted_pdp)
 ```
 
 ```{r}
-q <- vector('list', 4)
-names(q) <- nms[c(8,36,21,32)] #change these according to model rank list
-for (nm in nms[c(8,36,21,32)]) {
+q <- vector('list', 5)
+new_x_labels <- c("Seagrass community type", "Distance to coast", "Acute flood frequency", "Salinity", "Seagrass probability")
+
+names(q) <- nms[c(34,12,16,25,14)] #change these according to model rank list
+for (j in seq_along(nms[c(34,12,16,25,14)])) {
+  nm <- nms[c(34,12,16,25,14)][j]
   print(nm)
   q[[nm]] <- BRT.backgroundunmod %>% pdp::partial(pred.var=nm,
                                  n.trees=best.iterunmodb,
@@ -795,10 +708,26 @@ for (nm in nms[c(8,36,21,32)]) {
                                  #inv.link=plogis,
                                  #recursive=FALSE,
                                  type='regression') %>%
-    autoplot()+theme_classic()# + ylim(0, 1)
+    autoplot()+theme_classic() +# + ylim(0, 1)
+
+    labs(x=new_x_labels[j])
+  if (nm == "COMMUNITY") { # Rotate x-axis tick labels in the first panel
+    q[[nm]] <- q[[nm]] + theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+                                 scale_x_discrete(labels = function(x) {
+        x[x == "Non-seagrass habitat"] <- "NSG"
+        return(x)
+      })
+  }
 }
  
-do.call('grid.arrange', q)
+plot<-do.call('grid.arrange', q)
+
+title <- textGrob("B- Background, unmodified", x = unit(0, "npc"), just = "left", gp = gpar(fontsize = 16))
+
+# Combine the title and the plot
+final_plot <- arrangeGrob(plot, top = title)
+final_plot
+ggsave("backgroundunmod.partial.png", final_plot, width=8, height=6)
 # which categories best predict presence
 pdp_df <- BRT.backgroundunmod %>% pdp::partial(pred.var='COMMUNITY',
                                  n.trees=best.iterunmodb,
@@ -817,19 +746,39 @@ print(sorted_pdp)
 ```{r}
 nms <- colnames(train_data)
 r <- vector('list', 8)
-names(r) <- nms[c(11,13,29,30,42,14,7,42)] #change these according to model rank list
-for (nm in nms[c(11,13,29,30,42,14,7,42)]) {
+new_x_labels <- c("Seagrass community type", "Distance to mangroves", "Distance to boat ramps", "Distance to rivers", "Salinity", "Seagrass probability", "Temperature", "Large zooplankton nitrogen")
+names(r) <- nms[c(34,22,13,9,25,14,26,31)] #change these according to model rank list
+for (j in seq_along(nms[c(34,22,13,9,25,14,26,31)])) {
+  nm <- nms[c(34,22,13,9,25,14,26,31)][j]
   print(nm)
   r[[nm]] <- BRT.crwGL %>% pdp::partial(pred.var=nm,
                                  n.trees=best.iterGL,
                                  train=train_data,
-                                 # inv.link=plogis,
-                                 # recursive=FALSE,
+                                 #inv.link=plogis,
+                                 #recursive=FALSE,
                                  type='regression') %>%
-    autoplot()+theme_classic()  #+ ylim(0, 1)
+    autoplot()+theme_classic() +# + ylim(0, 1)
+
+    labs(x=new_x_labels[j])
+  if (nm == "COMMUNITY") { # Rotate x-axis tick labels in the first panel
+    r[[nm]] <- r[[nm]] + theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+                                 scale_x_discrete(labels = function(x) {
+        x[x == "Non-seagrass habitat"] <- "NSG"
+        return(x)
+      })
+  }
 }
  
 plot<-do.call('grid.arrange', r)
+
+title <- textGrob("C- CRW, modified", x = unit(0, "npc"), just = "left", gp = gpar(fontsize = 16))
+
+# Combine the title and the plot
+final_plot <- arrangeGrob(plot, top = title)
+final_plot
+ggsave("CRWGL.partial.png", final_plot, width=10, height=8)
+ 
+
 
 # which categories best predict presence
 pdp_df <- BRT.crwGL %>% pdp::partial(pred.var='COMMUNITY',
@@ -847,20 +796,38 @@ print(sorted_pdp)
 ```
 
 ```{r}
-s <- vector('list', 7)
-names(s) <- nms[c(11,7,13,14,20,33,17)] #change these according to model rank list
-for (nm in nms[c(11,7,13,14,20,33,17)]) {
+s <- vector('list', 8)
+names(s) <- nms[c(22,13,11,9,27,16,25,15)] #change these according to model rank list
+new_x_labels <- c("Distance to mangroves", "Distance to boat ramps", "Distance to reefs", "Distance to rivers", "Mean seawater velocity", "Acute flood frequency", "Salinity", "Temperature")
+for (j in seq_along(nms[c(22,13,11,9,27,16,25,15)])) {
+  nm <- nms[c(22,13,11,9,27,16,25,15)][j]
   print(nm)
   s[[nm]] <- BRT.crwunmod %>% pdp::partial(pred.var=nm,
-                                 n.trees=best.iterunmod,
+                                 n.trees=best.iter,
                                  train=train_data,
                                  #inv.link=plogis,
                                  #recursive=FALSE,
                                  type='regression') %>%
-    autoplot()+theme_classic()# + ylim(0, 1)
+    autoplot()+theme_classic() +# + ylim(0, 1)
+
+    labs(x=new_x_labels[j])
+  if (nm == "COMMUNITY") { # Rotate x-axis tick labels in the first panel
+    s[[nm]] <- s[[nm]] + theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+                                 scale_x_discrete(labels = function(x) {
+        x[x == "Non-seagrass habitat"] <- "NSG"
+        return(x)
+      })
+  }
 }
  
-do.call('grid.arrange', s)
+plot<-do.call('grid.arrange', s)
+
+title <- textGrob("D- CRW, unmodified", x = unit(0, "npc"), just = "left", gp = gpar(fontsize = 16))
+
+# Combine the title and the plot
+final_plot <- arrangeGrob(plot, top = title)
+final_plot
+ggsave("CRWunmod.partial.png", final_plot, width=8, height=6)
 # which categories best predict presence
 pdp_df <- BRT.crwunmod %>% pdp::partial(pred.var='COMMUNITY',
                                  n.trees=best.iterunmod,
@@ -875,6 +842,9 @@ sorted_pdp <- pdp_df[order(pdp_df$y, decreasing = TRUE), ]
 # If you want to view the sorted categories alongside their probabilities
 print(sorted_pdp)
 ```
+
+
+
 
 
 
@@ -893,18 +863,8 @@ bhattacharyya_distance <- function(mu1, sigma1, mu2, sigma2) {
 
 ```{r}
 #library(pfc)
-
-track_filtered<-data_join_b%>%filter(data_type=="1")
-background_filtered<-data_join_b%>%filter(data_type=="0")
-trackmmp<-track_filtered%>%filter(!is.na(mmpfrequency1))%>%select(mmpfrequency1)
-backgroundmmp<-background_filtered%>%filter(!is.na(mmpfrequency1))%>%select(mmpfrequency1)
-#disparity::bhatt.coeff(as.numeric(trackmmp), as.numeric(backgroundmmp)) no dice
-spatialEco::separability(trackmmp, backgroundmmp, plot=T)
-
-trackmmp<-track_filtered%>%filter(!is.na(mmpexposure1))%>%select(mmpexposure1)
-backgroundmmp<-background_filtered%>%filter(!is.na(mmpexposure1))%>%select(mmpexposure1)
-spatialEco::separability(trackmmp, backgroundmmp, na.rm=T, plot=T)
-
+track_filtered<-data_join_b%>%filter(data_type==1)
+background_filtered<-data_join_b%>%filter(data_type==0)
 # MMP exposure
 # using formula:
 mu1<-mean(track_filtered$mmpexposure1, na.rm=T)
@@ -925,20 +885,25 @@ bhattacharyya_distance(mu1, sigma1, mu2, sigma2)
 
 # coefficient
 sqrt(2 * sigma1 * sigma2 / (sigma1^2 + sigma2^2)) * exp(-1/4 * ((mu1 - mu2)^2 / (sigma1^2 + sigma2^2)))
-spatialEco::separability(track_filtered$dist2coast1_2, background_filtered$dist2coast1_2, plot=T)
 
-mu1<-mean(track_filtered$ZooL_N, na.rm=T)
-sigma1<-var(track_filtered$ZooL_N, na.rm=T)
-mu2<-mean(background_filtered$ZooL_N, na.rm=T)
-sigma2<-var(background_filtered$ZooL_N, na.rm=T)
+
+mu1<-mean(track_filtered$EFI, na.rm=T)
+sigma1<-var(track_filtered$EFI, na.rm=T)
+mu2<-mean(background_filtered$EFI, na.rm=T)
+sigma2<-var(background_filtered$EFI, na.rm=T)
 bhattacharyya_distance(mu1, sigma1, mu2, sigma2)
 
 # coefficient
 sqrt(2 * sigma1 * sigma2 / (sigma1^2 + sigma2^2)) * exp(-1/4 * ((mu1 - mu2)^2 / (sigma1^2 + sigma2^2)))
-trackzoo<-track_filtered%>%filter(!is.na(ZooL_N))%>%select(ZooL_N)
-backgroundzoo<-background_filtered%>%filter(!is.na(ZooL_N))%>%select(ZooL_N)
-spatialEco::separability(trackzoo, backgroundzoo, plot=T)
 
+mu1<-mean(track_filtered$seagrassP1, na.rm=T)
+sigma1<-var(track_filtered$seagrassP1, na.rm=T)
+mu2<-mean(background_filtered$seagrassP1, na.rm=T)
+sigma2<-var(background_filtered$seagrassP1, na.rm=T)
+bhattacharyya_distance(mu1, sigma1, mu2, sigma2)
+
+# coefficient
+sqrt(2 * sigma1 * sigma2 / (sigma1^2 + sigma2^2)) * exp(-1/4 * ((mu1 - mu2)^2 / (sigma1^2 + sigma2^2)))
 
 mu1<-mean(track_filtered$dist2coast, na.rm=T)
 sigma1<-var(track_filtered$dist2coast, na.rm=T)
@@ -994,10 +959,10 @@ sigma2<-var(crw_filtered$ZooL_N, na.rm=T)
 sqrt(2 * sigma1 * sigma2 / (sigma1^2 + sigma2^2)) * exp(-1/4 * ((mu1 - mu2)^2 / (sigma1^2 + sigma2^2)))
 
 
-mu1<-mean(track_filtered$EFI, na.rm=T)
-sigma1<-var(track_filtered$EFI, na.rm=T)
-mu2<-mean(crw_filtered$EFI, na.rm=T)
-sigma2<-var(crw_filtered$EFI, na.rm=T)
+mu1<-mean(track_filtered$mean_cur, na.rm=T)
+sigma1<-var(track_filtered$mean_cur, na.rm=T)
+mu2<-mean(crw_filtered$mean_cur, na.rm=T)
+sigma2<-var(crw_filtered$mean_cur, na.rm=T)
 # coefficient
 sqrt(2 * sigma1 * sigma2 / (sigma1^2 + sigma2^2)) * exp(-1/4 * ((mu1 - mu2)^2 / (sigma1^2 + sigma2^2)))
 
@@ -1008,10 +973,17 @@ sigma2<-var(crw_filtered$Dist2Rivers1, na.rm=T)
 # coefficient
 sqrt(2 * sigma1 * sigma2 / (sigma1^2 + sigma2^2)) * exp(-1/4 * ((mu1 - mu2)^2 / (sigma1^2 + sigma2^2)))
 
-mu1<-mean(track_filtered$bathy1, na.rm=T)
-sigma1<-var(track_filtered$bathy1, na.rm=T)
-mu2<-mean(crw_filtered$bathy1, na.rm=T)
-sigma2<-var(crw_filtered$bathy1, na.rm=T)
+mu1<-mean(track_filtered$dist2reefs1, na.rm=T)
+sigma1<-var(track_filtered$dist2reefs1, na.rm=T)
+mu2<-mean(crw_filtered$dist2reefs1, na.rm=T)
+sigma2<-var(crw_filtered$dist2reefs1, na.rm=T)
+# coefficient
+sqrt(2 * sigma1 * sigma2 / (sigma1^2 + sigma2^2)) * exp(-1/4 * ((mu1 - mu2)^2 / (sigma1^2 + sigma2^2)))
+
+mu1<-mean(track_filtered$temp, na.rm=T)
+sigma1<-var(track_filtered$temp, na.rm=T)
+mu2<-mean(crw_filtered$temp, na.rm=T)
+sigma2<-var(crw_filtered$temp, na.rm=T)
 # coefficient
 sqrt(2 * sigma1 * sigma2 / (sigma1^2 + sigma2^2)) * exp(-1/4 * ((mu1 - mu2)^2 / (sigma1^2 + sigma2^2)))
 
@@ -1108,11 +1080,11 @@ extract_tif_header_info_raster <- function(file_path) {
 }
 
 
-file_paths_tif <- list.files("enviro datasets/rasters for grid predictions/", pattern = "\\.tif$", full.names = TRUE)
+file_paths_tif <- list.files("../enviro datasets/rasters for grid predictions/", pattern = "\\.tif$", full.names = TRUE)
 header_info_tif <- lapply(file_paths_tif, extract_tif_header_info_raster)
 
 #make mask the first item in the vector
-file_paths_tif<-c(file_paths_tif[18], file_paths_tif[-c(18,19,36,4,12,14,2)])
+file_paths_tif<-c(file_paths_tif[18], file_paths_tif[-c(2,3,18,19,26,4,12,14, 37)])
 # Identify indices of elements containing "2022"
 indices_to_remove <- grep("2022", file_paths_tif)
 
@@ -1121,7 +1093,7 @@ file_paths_tif <- file_paths_tif[-indices_to_remove]
 
 # # e.g. Find the column number for "Age"
 # column_number <- which(names(df) == "Age")
-variable.names2010 <- c("mask", names(train_data_b)[c(15,9,8,37,12,17,14,33,10,35,36,26,29,20,21,46,24,18,34,47,25,19,32)]) #here make sure the order is the same as above, if you're using different data
+variable.names2010 <- c("mask", names(train_data_b)[c(8,34,12,13,11,10,32,6,7,22,27,30,17,16,18,25,14,33,19,26,15,31)]) #here make sure the order is the same as above, if you're using different data
 processed_layers <- list() # Initialize an empty list to store processed layers
 
 for(i in 1:length(file_paths_tif)) { 
@@ -1167,9 +1139,9 @@ preddat<- preddat[!is.na(preddat$mask),]
 
 ```{r}
 ### 2022
-file_paths_tif <- list.files("enviro datasets/rasters for grid predictions/", pattern = "\\.tif$", full.names = TRUE)
+file_paths_tif <- list.files("../enviro datasets/rasters for grid predictions/", pattern = "\\.tif$", full.names = TRUE)
 #make mask the first item in the vector
-file_paths_tif2022<-c(file_paths_tif[18], file_paths_tif[-c(18,19,36,4,12,14,2)])
+file_paths_tif2022<-c(file_paths_tif[18], file_paths_tif[-c(2,3,18,19,26,4,12,14, 37)])
 # Identify indices of elements containing "2010"
 indices_to_remove <- grep("2010", file_paths_tif2022)
 
@@ -1178,7 +1150,7 @@ file_paths_tif2022 <- file_paths_tif2022[-indices_to_remove]
 
 # # e.g. Find the column number for "Age"
 # column_number <- which(names(df) == "Age")
-variable.names2022 <- c("mask", names(train_data_b)[c(15,9,8,37,12,17,14,33,10,35,36,26,29,20,21,46,24,18,34,47,25,19,32)]) #here make sure the order is the same as above, if you're using different data
+variable.names2022 <- c("mask", names(train_data_b)[c(8,34,12,13,11,10,32,6,7,22,27,30,17,16,18,25,14,33,19,26,15,31)]) #here make sure the order is the same as above, if you're using different data
 processed_layers2022 <- list() # Initialize an empty list to store processed layers
 
 for(i in 1:length(file_paths_tif2022)) { 
@@ -1214,43 +1186,39 @@ preddat2022 <- data.frame(rasters_values2022)
 names(preddat2022) <- variable.names2022
 preddat2022<- preddat2022[!is.na(preddat2022$mask),]
 # this step takes a really long time
-# do I need to do something about NAs/ nodata values being different in different layers? nop
+
 
 
 
 #categorical variables - obtain factor levels
-COMMUNITY1<-terra::vect("enviro datasets/NESP predicted distribution of seagrass communities/Shapefiles/GBR_NESP-TWQ-5.4_JCU_Seagrass-communities_20201203.shp")
+COMMUNITY1<-terra::vect("../enviro datasets/NESP predicted distribution of seagrass communities/Shapefiles/GBR_NESP-TWQ-5.4_JCU_Seagrass-communities_20201203.shp")
 levels<-levels(as.factor(COMMUNITY1$COMMUNITY))
 # Recover the original factor levels for the aggregated raster
 preddat2022$COMMUNITY<-factor(preddat2022$COMMUNITY, levels=1:length(levels), labels=levels)
 preddat$COMMUNITY<-factor(preddat$COMMUNITY, levels=1:length(levels), labels=levels)
 
-builtfeature<-terra::vect("enviro datasets/Breakwaters, groynes, seawalls, marinas/QSC_Extracted_Data_20231018_085138072000-40848/data.gdb")
-levels<-levels(as.factor(builtfeature$FEATURETYPE))
-preddat2022$builtfeature<- factor(preddat2022$builtfeature, levels=1:length(levels), labels=levels)
-preddat$builtfeature<- factor(preddat$builtfeature, levels=1:length(levels), labels=levels)
+# builtfeature<-terra::vect("../enviro datasets/Breakwaters, groynes, seawalls, marinas/QSC_Extracted_Data_20231018_085138072000-40848/data.gdb")
+# levels<-levels(as.factor(builtfeature$FEATURETYPE))
+# preddat2022$builtfeature<- factor(preddat2022$builtfeature, levels=1:length(levels), labels=levels)
+# preddat$builtfeature<- factor(preddat$builtfeature, levels=1:length(levels), labels=levels)
 
-geohab<-terra::vect("enviro datasets/qld_geohab_av/czm/pristine_ests/release/qld/shape/geohab_qld_v2.shp")
+geohab<-terra::vect("../enviro datasets/qld_geohab_av/czm/pristine_ests/release/qld/shape/geohab_qld_v2.shp")
 levels<-levels(as.factor(geohab$GH_TYPE))
 preddat2022$geohab<-factor(preddat2022$geohab, levels=1:length(levels), labels=levels)
 preddat$geohab<-factor(preddat$geohab, levels=1:length(levels), labels=levels)
 
-geomorph<-terra::vect("enviro datasets/Heap2008Geomorphology.shp")
+geomorph<-terra::vect("../enviro datasets/Heap2008Geomorphology.shp")
 levels<-levels(as.factor(geomorph$feature))
 preddat2022$geomorph<-factor(preddat2022$geomorph, levels=1:length(levels), labels=levels)
 preddat$geomorph<-factor(preddat$geomorph, levels=1:length(levels), labels=levels)
 
 write.csv(preddat, "preddat.grid.background.csv")
 write.csv(preddat2022, "preddat2022.grid.background.csv")
-# preddat<- preddat[!is.na(mask),]
-
-#?names(preddat2022)[-c(1,2)] <- variable.names2022[2:length(variable.names2022)]
-#names(preddat)[-c(1,2)] <- variable.names2010[2:length(variable.names2010)]
 ```
 
 ```{r}
-preddat<-read.csv("preddat.grid.background.csv")
-preddat2022<-read.csv("preddat2022.grid.background.csv")
+# preddat<-read.csv("preddat.grid.background.csv")
+# preddat2022<-read.csv("preddat2022.grid.background.csv")
 ```
 ```{r}
 raster_extent <- extent(mask)
@@ -1262,7 +1230,9 @@ yllcorner <- ymin(raster_extent)
 
 
 ```{r}
-source("Elith 2008 tutorial/brt.functions.R")
+source("../Elith 2008 tutorial/brt.functions.R")
+dist2rivers1<-Dist2Rivers1
+preddat$dist2rivers1<-preddat$Dist2Rivers1
 unmodgrid2010<-gbm.predict.grids(BRT.backgroundunmod, # change this when you have all the rasters, this step takes a really long time
                   preddat, 
                   want.grids = T, 
@@ -1294,6 +1264,7 @@ modgrid2010<-gbm.predict.grids(BRT.backgroundGL,
 saveRDS(modgrid2010, "grid2010mod2.Rds")
 ```
 ```{r}
+preddat2022$dist2rivers1<-preddat2022$Dist2Rivers1
 unmodgrid2022<-gbm.predict.grids(BRT.backgroundunmod, # change this when you have all the rasters, this step takes a really long time
                   preddat2022, 
                   want.grids = T, 
@@ -1329,6 +1300,7 @@ saveRDS(modgrid2022, "grid2022mod2.Rds")
 dist2coast<-dist2coast1_2
 preddat$dist2coast<-preddat$dist2coast1_2
 preddat2022$dist2coast<-preddat2022$dist2coast1_2
+
 unmodgrid2010crw<-gbm.predict.grids(BRT.crwunmod, # change this when you have all the rasters, this step takes a really long time
                   preddat, 
                   want.grids = T, 
@@ -1393,38 +1365,41 @@ saveRDS(modgrid2022crw, "grid2022modcrw.Rds")
 
 ```{r}
 
-unmodgrid2022crw<-readRDS("grid2022unmodcrw.Rds")
-
-unmodgrid2010crw<-readRDS("grid2010unmodcrw.Rds")
-
-modgrid2022crw<-readRDS("grid2022modcrw.Rds")
-modgrid2010crw<-readRDS("grid2010modcrw.Rds")
+# unmodgrid2022crw<-readRDS("grid2022unmodcrw.Rds")
+# 
+# unmodgrid2010crw<-readRDS("grid2010unmodcrw.Rds")
+# 
+# modgrid2022crw<-readRDS("grid2022modcrw.Rds")
+# modgrid2010crw<-readRDS("grid2010modcrw.Rds")
 
 # how much area in 2010 vs 2022
 sum(unmodgrid2022crw>0.5)*250000/1000000
 sum(unmodgrid2010crw>0.5)*250000/1000000
-sum(modgrid2022crw<0.5)*250000/1000000
-sum(modgrid2010crw<0.5)*250000/1000000
+sum(modgrid2022crw>0.5)*250000/1000000
+sum(modgrid2010crw>0.5)*250000/1000000
 ```
 ```{r}
 #% within 50km of coastline
-16484/sum(unmodgrid2010crw>0.5)
-19132/sum(unmodgrid2022crw>0.5)
+18290/sum(unmodgrid2010crw>0.5)
+15985/sum(unmodgrid2022crw>0.5)
 ```
-
+This was calculated in QGIS by 
+1. extracting raster by mask where mask layer was a 50km buffer around coastline
+2. retaining only cells with a value >0.5
+3. using zonal statistics to calculate the sum of remaining cells.
 
 # Difference evaluation
 Area? 
 ```{r}
 sum(backgroundGL_preds>0.5) # number of 500m pixels with more than 50% probability of presence
-sum(backgroundGL_preds2022>0.5) # way less in 2022
+sum(backgroundGL_preds2022>0.5)/893690 # way less in 2022
 sum(backgroundunmod_preds>0.5) 
-sum(backgroundunmod_preds2022>0.5) # way less in 2022
+sum(backgroundunmod_preds2022>0.5)/893690 # way less in 2022
 
-sum(crwGL_preds2022<0.5) # number of 500m pixels with more than 50% probability of presence
-sum(crwunmod_preds2022>0.5) # way less in 2022, 34608
-sum(crwunmod_preds>0.5) 
-sum(crwunmod_preds2022>0.5) # way less in 2022
+sum(crwGL_preds2022>0.5)/893690 # number of 500m pixels with more than 50% probability of presence
+sum(crwunmod_preds2022>0.5)/893690 # way less in 2022, 34608
+sum(crwunmod_preds>0.5)/893690
+sum(crwunmod_preds2022>0.5)/893690 # way less in 2022
 ```
 
 ```{r}
@@ -1437,6 +1412,11 @@ sum(preddat2022$ZooL_N<3, na.rm=T) # much more in 2022
 sum(preddat$EFI<0.1, na.rm=T)
 sum(preddat2022$EFI<0.1, na.rm=T) # a bit less in 2022, but not heaps
 ```
+
+```{r}
+0.25*0.02364019*93690
+```
+
 
 2010 vs 2022
 ```{r}
@@ -1454,8 +1434,8 @@ hist(preddat2022$Secchi)
 
 # % overlap with protected zones and ports
 ```{r}
-zones<-st_read("enviro datasets/Great_Barrier_Reef_Marine_Park_Zoning/Great_Barrier_Reef_Marine_Park_Zoning.shp")
-ports<-st_read("../enviro shapefiles/Port_ERMP/Ports_GBR.shp")
+zones<-st_read("../enviro datasets/Great_Barrier_Reef_Marine_Park_Zoning/Great_Barrier_Reef_Marine_Park_Zoning.shp")
+ports<-st_read("../../enviro shapefiles/Port_ERMP/Ports_GBR.shp")
 
 crwunmod2022<-raster("brtpred/crwunmod_preds2022.asc")
 ```
@@ -1498,7 +1478,7 @@ values <- getValues(pixels_greater_than_0_5)
 habitat <- sum(values, na.rm = TRUE)
 
 summary_df$percentage_area<-round(summary_df$total_pixels/habitat,3)
-print(summary_df)
+print(asummary_df)
 
 
 ### ports
@@ -1517,7 +1497,7 @@ summary_dfports$percentage_area<-round(summary_dfports$total_pixels/habitat,3)
 ```
 How much fell outside the marine park boundary (i.e. higher than mid water)
 ```{r}
-GBRMP<-st_read("enviro datasets/Great Barrier Reef Marine Park Boundary.shp")
+GBRMP<-st_read("../enviro datasets/Great Barrier Reef Marine Park Boundary.shp")
 GBRMP <- st_transform(GBRMP, crs(crwunmod2022))
 coverage_stats <- exact_extract(crwunmod2022, GBRMP, fun = function(values, coverage_fraction) {
   sum(values>0.5&!is.na(values) * coverage_fraction)

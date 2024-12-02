@@ -76,8 +76,6 @@ Input for habitat model runs. Contains turtle presences (from state-space modell
 
 "20240704ssm.Rds" = Presences, i.e., output from prep&presences.Rmd, estimated locations of turtles at 12 hour intervals using movement persistence models in aniMotum.
 
-"20240704ssm_24h.Rdata" = Presences, i.e., output from prep&presences.Rmd, estimated locations of turtles whose tracks did not converge at 12h intervals, at 24h intervals.
-
 Outputs from Pseudoabsences.R & AppendtoEnviroData.Rmd=
 
 1.  "track.csv" = presences
@@ -167,3 +165,27 @@ Input rasters for grid predictions as .tif files, excludes MMP grids (exposure a
     -   tidalexposure.tif - Tidal Exposure
     -   ZooL_N2010.tif - Large zooplankton Nitorogen December 2010
     -   ZooL_N2022.tif - Large zooplankton Nitrogen December 2022
+
+## Final model outputs
+
+Ascii grids named as:
+
+GL or unmod, indicating whether Port Curtis (GL) or Shoalwater Bay and Raine Island (unmod) data were used.
+
+If 2022 is specified, model prediction is based on environmental predictor data from December 2022, otherwise environmental predictor data are from December 2010.
+
+-   backgroundGL_preds.asc
+
+-   backgroundGL_preds2022.asc
+
+-   backgroundunmod_preds.asc
+
+-   backgroundunmod_preds2022.asc
+
+-   crwGL_preds.asc
+
+-   crwCL_preds2022.asc
+
+-   crwunmod_preds.asc
+
+-   crwunmod_preds2022.asc

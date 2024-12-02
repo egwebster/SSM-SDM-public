@@ -76,11 +76,11 @@ Input for habitat model runs. Contains turtle presences (from state-space modell
 
 "20240704ssm.Rds" = Presences, i.e., output from prep&presences.Rmd, estimated locations of turtles at 12 hour intervals using movement persistence models in aniMotum.
 
-Outputs from Pseudoabsences.R & AppendtoEnviroData.Rmd=
+Outputs from Pseudoabsences.R & AppendtoEnviroData.Rmd="20240806AppendedAll.csv", contains three data types:
 
-1.  "track.csv" = presences
-2.  "background.csv" = background pseudo-absences
-3.  "crw.csv" = correlated random walk pseudo-absences
+1.  "track" = presences
+2.  "background" = background pseudo-absences
+3.  "crw" = correlated random walk pseudo-absences
 
 #### Variable descriptions
 

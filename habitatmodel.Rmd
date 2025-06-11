@@ -11,6 +11,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r}
 source("LoadPackages_PA.R")
 library(sf)
+library(iml)
 ```
 
 
@@ -77,36 +78,36 @@ unmodified<-data_join%>%filter(!Deploy.site%in%c("GL"))
 
 
 ```{r}
-#sample data (75% training 25% testing)
-# library(caret)
-set.seed(123)
-splitIndex <- createDataPartition(data_join$data_type, p = 0.75, list = FALSE)
-train_data <- data_join[splitIndex, ]
-test_data <- data_join[-splitIndex, ]
-
-# GL sample
-splitIndexGL <- createDataPartition(GL$data_type, p = 0.75, list = FALSE)
-train_dataGL <- GL[splitIndexGL, ]
-test_dataGL <- GL[-splitIndexGL, ]
-# unmodified sample
-splitIndexunmodified <- createDataPartition(unmodified$data_type, p = 0.75, list = FALSE)
-train_dataunmodified <- unmodified[splitIndexunmodified, ]
-test_dataunmodified <- unmodified[-splitIndexunmodified, ]
+# #sample data (75% training 25% testing)
+# # library(caret)
+# set.seed(123)
+# splitIndex <- createDataPartition(data_join$data_type, p = 0.75, list = FALSE)
+# train_data <- data_join[splitIndex, ]
+# test_data <- data_join[-splitIndex, ]
+# 
+# # GL sample
+# splitIndexGL <- createDataPartition(GL$data_type, p = 0.75, list = FALSE)
+# train_dataGL <- GL[splitIndexGL, ]
+# test_dataGL <- GL[-splitIndexGL, ]
+# # unmodified sample
+# splitIndexunmodified <- createDataPartition(unmodified$data_type, p = 0.75, list = FALSE)
+# train_dataunmodified <- unmodified[splitIndexunmodified, ]
+# test_dataunmodified <- unmodified[-splitIndexunmodified, ]
 ```
 ```{r}
-set.seed(123)
-splitIndex_b <- createDataPartition(data_join_b$data_type, p = 0.75, list = FALSE)
-train_data_b <- data_join_b[splitIndex_b, ]
-test_data_b <- data_join_b[-splitIndex_b, ]
-
-# GL sample
-splitIndexGL_b <- createDataPartition(GL_b$data_type, p = 0.75, list = FALSE)
-train_dataGL_b <- GL_b[splitIndexGL_b, ]
-test_dataGL_b <- GL_b[-splitIndexGL_b, ]
-# unmodified sample
-splitIndexunmodified_b <- createDataPartition(unmodified_b$data_type, p = 0.75, list = FALSE)
-train_dataunmodified_b <- unmodified_b[splitIndexunmodified_b, ]
-test_dataunmodified_b <- unmodified_b[-splitIndexunmodified_b, ]
+# set.seed(123)
+# splitIndex_b <- createDataPartition(data_join_b$data_type, p = 0.75, list = FALSE)
+# train_data_b <- data_join_b[splitIndex_b, ]
+# test_data_b <- data_join_b[-splitIndex_b, ]
+# 
+# # GL sample
+# splitIndexGL_b <- createDataPartition(GL_b$data_type, p = 0.75, list = FALSE)
+# train_dataGL_b <- GL_b[splitIndexGL_b, ]
+# test_dataGL_b <- GL_b[-splitIndexGL_b, ]
+# # unmodified sample
+# splitIndexunmodified_b <- createDataPartition(unmodified_b$data_type, p = 0.75, list = FALSE)
+# train_dataunmodified_b <- unmodified_b[splitIndexunmodified_b, ]
+# test_dataunmodified_b <- unmodified_b[-splitIndexunmodified_b, ]
 ```
 
 correlation matrix
@@ -116,11 +117,27 @@ data4cor<-data.num[,c(3:14, 16, 19:21, 24:29)]
 corr<-cor(data4cor, method='pearson', use='pairwise.complete.obs')
 round(corr, 3)
 # extract pairs with 0.7 coeficient or higher
-w <- which(abs(corr)>=0.7 & row(corr)<col(corr), arr.ind=TRUE)
+w <- which(abs(corr)>0.8 & row(corr)<col(corr), arr.ind=TRUE)
 ## reconstruct names from positions
 high_cor <- matrix(colnames(corr)[w],ncol=2)
 high_cor
 ```
+Remove highly (>0.7) correlated variables from subsequent analysis
+1) bathy, dist2coast, dist2rivers, dist2recboats, 
+2) mmpexposure vs dist2coast and bathy
+3) mmpfrequency vs dist2coast and bathy
+4) mmpexposure vs mmpfrequency
+5) ruggedness vs slope
+6) dea mangrovs vs bathy & dist2coast
+7) Secchi vs bathy, mmpfrequency and mmpexposure
+
+Keep: mmpexposure1, bathy, dist2coast, ruggedness
+-> run 1 model with bathy and 1 with dist2coast?
+Remove: Secchi, deamangroves, slope, dist2rivers, dist2boatramps
+
+
+With 0.8 as the cutoff for correlation, 
+remove: dist2boats, slope, deamangrove and mmpfrequency
 
 ```{r}
 data.num<-select_if(data_join_b, is.numeric)# include only numeric
@@ -206,11 +223,8 @@ deamangroves 1
 slope 0
 ruggedness 0
 
-
+# model runs
 ```{r}
-#model runs
-
-#brt, gradient boosted models
 
 try(BRT.crw<-gbm.fixed(data=train_data, 
                        gbm.x=c(6:9, 11:19, 22, 25:27, 30:34), 
@@ -304,38 +318,501 @@ BRT.backgroundGL<-readRDS("BRT.backgroundGL.Rds")
 BRT.backgroundunmod<-readRDS("BRT.backgroundunmod.Rds")
 ```
 
-
-
-Must first check, pruning.
+##########################
+# re-run with 5-fold CV
 ```{r}
-# perform out of bag method
-(best.iterGL=gbm.perf(BRT.crwGL, method="OOB"))
-(best.iterunmod=gbm.perf(BRT.crwunmod, method="OOB"))
-(best.iter=gbm.perf(BRT.crw, method="OOB"))
+library(pROC)
 
-(best.iterGLb=gbm.perf(BRT.backgroundGL, method="OOB"))
-(best.iterunmodb=gbm.perf(BRT.backgroundunmod, method="OOB"))
-(best.iterb=gbm.perf(BRT.background1, method="OOB"))
+# Set up 5-fold CV
+set.seed(42)
+folds <- cut(seq(1, nrow(unmodified)), breaks = 5, labels = FALSE)
+
+all_importances <- list()
+auc_scores <- c()
+best_iter_list <- c() 
+
+for (k in 1:5) {
+  test_indices <- which(folds == k, arr.ind = TRUE)
+  test_fold <- unmodified[test_indices, ]
+  train_fold <- unmodified[-test_indices, ]
+  
+  # Fit model
+  model_k <- gbm.fixed(
+    data = train_fold,
+    gbm.x = c(6:9, 11:19, 22, 25:27, 30:34),
+    gbm.y = 3,
+    family = "bernoulli",
+    var.monotone = c(0,0,-1,-1,0,0,-1,0,0,0,0,0,0,1,0,0,0,1,1,1,1,0),
+    tree.complexity = 5,
+    learning.rate = 0.005,
+    n.trees = 10000,
+    bag.fraction = 0.75
+  )
+  
+    # Determine best number of trees via OOB deviance
+  best_trees <- gbm.perf(model_k, method = "OOB", plot.it = FALSE)
+  best_iter_list[k] <- best_trees
+  cat("  Best iteration (trees):", best_trees, "\n")
+  
+  # Predict on held-out fold
+  preds <- predict.gbm(
+    model_k,
+    newdata = test_fold,
+    type = "response",
+    n.trees = best_trees
+  )
+  
+  # Evaluate AUC
+  roc_obj <- roc(test_fold[, 3], preds)
+  auc_scores[k] <- auc(roc_obj)
+  
+  # variable importance
+  imp <- summary(model_k, plotit = FALSE)
+  imp$Fold <- k
+  all_importances[[k]] <- imp
+}
+
+mean_auc <- mean(auc_scores)
+print(paste("Mean AUC across folds:", round(mean_auc, 3)))
 ```
-Shows mean change in predictive deviance. Blue dotted line shows number of trees at which this reaches a minimum. 
 ```{r}
-#variable importance
-summary(BRT.crw, n.trees=best.iter) # temperature, large zooplankton, distance to rec boat facilities, dist2rivers, salinity
+# Combine importance data across folds
+imp_df <- do.call(rbind, all_importances)
 
-# anything with >3.3 they're explaining something, and the others aren't explaining very much
+# Calculate mean importance per variable
+library(dplyr)
+avg_importance <- imp_df %>%
+  group_by(var) %>%
+  summarise(mean_rel_inf = mean(rel.inf)) %>%
+  arrange(mean_rel_inf)
+
+# Optional: print top and bottom variables
+print("Lowest importance predictors:")
+print(head(avg_importance, 5))
+
+# Identify lowest 20% to consider removing
+n_vars <- nrow(avg_importance)
+low_vars <- avg_importance$var[1:ceiling(0.2 * n_vars)]
 ```
+```{r}
+vars_to_drop <- c("geohab", "geomorph", "mean_wspeed", "EFI", "Secchi") 
+selected_vars <- names(train_dataunmodified)[c(6:9, 11:19, 22, 25:27, 30:34)]
+final_vars <- setdiff(selected_vars, vars_to_drop)
+gbm_x_indices <- which(names(train_dataunmodified) %in% final_vars)
+```
+
+
+Rerun CV, removing vars that are consistently unimportant and changing n.trees to match best.iter of folds from previous run.
+```{r}
+# Set up 5-fold CV
+set.seed(42)
+folds <- cut(seq(1, nrow(unmodified)), breaks = 5, labels = FALSE)
+
+all_importances <- list()
+auc_scores <- c()
+best_iter_list <- c() 
+
+for (k in 1:5) {
+  test_indices <- which(folds == k, arr.ind = TRUE)
+  test_fold <- unmodified[test_indices, ]
+  train_fold <- unmodified[-test_indices, ]
+
+  # Fit model
+  model_k <- gbm.fixed(
+    data = train_fold,
+    gbm.x = gbm_x_indices,
+    gbm.y = 3,
+    family = "bernoulli",
+    var.monotone = c(-1,-1,0,0,-1,0,0,0,0,0,0,1,0,0,0,1,0),
+    tree.complexity = 5,
+    learning.rate = 0.005,
+    n.trees = 3000,
+    bag.fraction = 0.75
+  )
+  
+    # Determine best number of trees via OOB deviance
+  best_trees <- gbm.perf(model_k, method = "OOB", plot.it = FALSE)
+  best_iter_list[k] <- best_trees
+  cat("  Best iteration (trees):", best_trees, "\n")
+  
+  # Predict on held-out fold
+  preds <- predict.gbm(
+    model_k,
+    newdata = test_fold,
+    type = "response",
+    n.trees = best_trees
+  )
+  
+  # Evaluate AUC
+  roc_obj <- roc(test_fold[, 3], preds)
+  auc_scores[k] <- auc(roc_obj)
+  
+  # variable importance
+  imp <- summary(model_k, plotit = FALSE)
+  imp$Fold <- k
+  all_importances[[k]] <- imp
+}
+
+mean_auc <- mean(auc_scores)
+print(paste("Mean AUC across folds:", round(mean_auc, 3)))
+```
+If drop in AUC is >0.02, check other model performance metrics.
+```{r}
+# Combine importance data across folds
+imp_df <- do.call(rbind, all_importances)
+
+# Calculate mean importance per variable
+avg_importance <- imp_df %>%
+  group_by(var) %>%
+  summarise(mean_rel_inf = mean(rel.inf)) %>%
+  arrange(mean_rel_inf)
+
+# Optional: print top and bottom variables
+print("Lowest importance predictors:")
+print(head(avg_importance, 5))
+
+# Identify lowest 20% to consider removing
+n_vars <- nrow(avg_importance)
+low_vars <- avg_importance$var[1:ceiling(0.2 * n_vars)]
+```
+# consider removing and rerunning CV? Zool_N, seagrassP1, slope1, COMMUNITY, bathy1
+
+```{r}
+vars_to_drop <- c("ZooL_N", "seagrassP1", "slope1", "COMMUNITY", "bathy1", "geohab", "geomorph", "mean_wspeed", "EFI", "Secchi") 
+selected_vars <- names(train_dataunmodified)[c(6:9, 11:19, 22, 25:27, 30:34)]
+final_vars <- setdiff(selected_vars, vars_to_drop)
+gbm_x_indices <- which(names(train_dataunmodified) %in% final_vars)
+```
+
+```{r}
+# Set up 5-fold CV
+set.seed(42)
+folds <- cut(seq(1, nrow(unmodified)), breaks = 5, labels = FALSE)
+
+all_importances <- list()
+auc_scores <- c()
+best_iter_list <- c() 
+
+for (k in 1:5) {
+  test_indices <- which(folds == k, arr.ind = TRUE)
+  test_fold <- unmodified[test_indices, ]
+  train_fold <- unmodified[-test_indices, ]
+
+  # Fit model
+  model_k <- gbm.fixed(
+    data = train_fold,
+    gbm.x = gbm_x_indices,
+    gbm.y = 3,
+    family = "bernoulli",
+    var.monotone = c(-1,0,0,-1,0,0,0,0,1,0,0,0),
+    tree.complexity = 5,
+    learning.rate = 0.005,
+    n.trees = 3000,
+    bag.fraction = 0.75
+  )
+  
+    # Determine best number of trees via OOB deviance
+  best_trees <- gbm.perf(model_k, method = "OOB", plot.it = FALSE)
+  best_iter_list[k] <- best_trees
+  cat("  Best iteration (trees):", best_trees, "\n")
+  
+  # Predict on held-out fold
+  preds <- predict.gbm(
+    model_k,
+    newdata = test_fold,
+    type = "response",
+    n.trees = best_trees
+  )
+  
+  # Evaluate AUC
+  roc_obj <- roc(test_fold[, 3], preds)
+  auc_scores[k] <- auc(roc_obj)
+  
+  # variable importance
+  imp <- summary(model_k, plotit = FALSE)
+  imp$Fold <- k
+  all_importances[[k]] <- imp
+}
+
+mean_auc <- mean(auc_scores)
+print(paste("Mean AUC across folds:", round(mean_auc, 3)))
+```
+AUC has actually gone up
+
+
+Final model run, using params from CV
+```{r}
+final_modelunmod <- gbm.fixed(
+  data = unmodified,
+  gbm.x = gbm_x_indices,   # cleaned feature set
+  gbm.y = 3,
+  family = "bernoulli",
+  var.monotone = c(-1,0,0,-1,0,0,0,0,1,0,0,0),
+  tree.complexity = 5,
+  learning.rate = 0.005,
+  n.trees = 3000,  
+  bag.fraction = 0.75
+)
+saveRDS(final_modelunmod, "final_unmod.Rds")
+```
+
+```{r}
+# pruning
+(best.iter=gbm.perf(final_modelunmod, method="OOB"))
+summary(final_modelunmod)
+```
+
+##### repeat model formulaiton processfor GL
+whole model with CV
+```{r}
+
+# Set up 5-fold CV
+set.seed(42)
+folds <- cut(seq(1, nrow(GL)), breaks = 5, labels = FALSE)
+
+all_importances <- list()
+auc_scores <- c()
+best_iter_list <- c() 
+
+for (k in 1:5) {
+  test_indices <- which(folds == k, arr.ind = TRUE)
+  test_fold <- GL[test_indices, ]
+  train_fold <- GL[-test_indices, ]
+  
+  # Fit model
+  model_k <- gbm.fixed(
+    data = train_fold,
+    gbm.x = c(6:9, 11:19, 22, 25:27, 30:34),
+    gbm.y = 3,
+    family = "bernoulli",
+    var.monotone = c(0,0,-1,-1,0,0,-1,0,0,0,0,0,0,1,0,0,0,1,1,1,1,0),
+    tree.complexity = 5,
+    learning.rate = 0.005,
+    n.trees = 5000,
+    bag.fraction = 0.75
+  )
+  
+    # Determine best number of trees via OOB deviance
+  best_trees <- gbm.perf(model_k, method = "OOB", plot.it = FALSE)
+  best_iter_list[k] <- best_trees
+  cat("  Best iteration (trees):", best_trees, "\n")
+  
+  # Predict on held-out fold
+  preds <- predict.gbm(
+    model_k,
+    newdata = test_fold,
+    type = "response",
+    n.trees = best_trees
+  )
+  
+  # Evaluate AUC
+  roc_obj <- roc(test_fold[, 3], preds)
+  auc_scores[k] <- auc(roc_obj)
+  
+  # variable importance
+  imp <- summary(model_k, plotit = FALSE)
+  imp$Fold <- k
+  all_importances[[k]] <- imp
+}
+
+mean_auc <- mean(auc_scores)
+print(paste("Mean AUC across folds:", round(mean_auc, 3)))
+```
+
+
+```{r}
+# Combine importance data across folds
+imp_df <- do.call(rbind, all_importances)
+
+# Calculate mean importance per variable
+library(dplyr)
+avg_importance <- imp_df %>%
+  group_by(var) %>%
+  summarise(mean_rel_inf = mean(rel.inf)) %>%
+  arrange(mean_rel_inf)
+
+# Optional: print top and bottom variables
+print("Lowest importance predictors:")
+print(head(avg_importance, 15))
+
+# Identify lowest 20% to consider removing
+n_vars <- nrow(avg_importance)
+low_vars <- avg_importance$var[1:ceiling(0.2 * n_vars)]
+```
+```{r}
+vars_to_drop <- c('geomorph', 'bathy1', 'slope1', 'EFI', 'mean_cur', 'mean_wspeed', 'Secchi', 'ZooL_N', 'ruggedness1', 'mmpexposure1') # update this!
+selected_vars <- names(GL)[c(6:9, 11:19, 22, 25:27, 30:34)]
+final_vars <- setdiff(selected_vars, vars_to_drop)
+gbm_x_indices <- which(names(GL) %in% final_vars)
+```
+
+
+Rerun CV, removing vars that are consistently unimportant and changing n.trees to match best.iter of folds from previous run.
+```{r}
+# Set up 5-fold CV
+set.seed(42)
+folds <- cut(seq(1, nrow(GL)), breaks = 5, labels = FALSE)
+
+all_importances <- list()
+auc_scores <- c()
+best_iter_list <- c() 
+
+for (k in 1:5) {
+  test_indices <- which(folds == k, arr.ind = TRUE)
+  test_fold <- GL[test_indices, ]
+  train_fold <- GL[-test_indices, ]
+
+  # Fit model
+  model_k <- gbm.fixed(
+    data = train_fold,
+    gbm.x = gbm_x_indices,
+    gbm.y = 3,
+    family = "bernoulli",
+    var.monotone = c(0,-1,-1,-1,0,0,0,0,0,0,0,0), # update this!
+    tree.complexity = 5,
+    learning.rate = 0.005,
+    n.trees = 10000,
+    bag.fraction = 0.75
+  )
+  
+    # Determine best number of trees via OOB deviance
+  best_trees <- gbm.perf(model_k, method = "OOB", plot.it = FALSE)
+  best_iter_list[k] <- best_trees
+  cat("  Best iteration (trees):", best_trees, "\n")
+  
+  # Predict on held-out fold
+  preds <- predict.gbm(
+    model_k,
+    newdata = test_fold,
+    type = "response",
+    n.trees = best_trees
+  )
+  
+  # Evaluate AUC
+  roc_obj <- roc(test_fold[, 3], preds)
+  auc_scores[k] <- auc(roc_obj)
+  
+  # variable importance
+  imp <- summary(model_k, plotit = FALSE)
+  imp$Fold <- k
+  all_importances[[k]] <- imp
+}
+
+mean_auc <- mean(auc_scores)
+print(paste("Mean AUC across folds:", round(mean_auc, 3)))
+```
+```{r}
+# Combine importance data across folds
+imp_df <- do.call(rbind, all_importances)
+
+# Calculate mean importance per variable
+library(dplyr)
+avg_importance <- imp_df %>%
+  group_by(var) %>%
+  summarise(mean_rel_inf = mean(rel.inf)) %>%
+  arrange(mean_rel_inf)
+
+# Optional: print top and bottom variables
+print("Lowest importance predictors:")
+print(head(avg_importance, 15))
+
+# Identify lowest 20% to consider removing
+n_vars <- nrow(avg_importance)
+low_vars <- avg_importance$var[1:ceiling(0.2 * n_vars)]
+```
+```{r}
+vars_to_drop <- c('dist2coast1_2', 'geohab', 'geomorph', 'bathy1', 'slope1', 'EFI', 'mean_cur', 'mean_wspeed', 'Secchi', 'ZooL_N', 'ruggedness1', 'mmpexposure1') # update this!
+selected_vars <- names(GL)[c(6:9, 11:19, 22, 25:27, 30:34)]
+final_vars <- setdiff(selected_vars, vars_to_drop)
+gbm_x_indices <- which(names(GL) %in% final_vars)
+```
+
+
+Rerun CV, removing vars that are consistently unimportant and changing n.trees to match best.iter of folds from previous run.
+```{r}
+# Set up 5-fold CV
+set.seed(42)
+folds <- cut(seq(1, nrow(GL)), breaks = 5, labels = FALSE)
+
+all_importances <- list()
+auc_scores <- c()
+best_iter_list <- c() 
+
+for (k in 1:5) {
+  test_indices <- which(folds == k, arr.ind = TRUE)
+  test_fold <- GL[test_indices, ]
+  train_fold <- GL[-test_indices, ]
+
+  # Fit model
+  model_k <- gbm.fixed(
+    data = train_fold,
+    gbm.x = gbm_x_indices,
+    gbm.y = 3,
+    family = "bernoulli",
+    var.monotone = c(-1,0,-1,0,0,0,1,0,0,0)), # update this!
+    tree.complexity = 5,
+    learning.rate = 0.005,
+    n.trees = 15000,
+    bag.fraction = 0.75
+  )
+  
+    # Determine best number of trees via OOB deviance
+  best_trees <- gbm.perf(model_k, method = "OOB", plot.it = FALSE)
+  best_iter_list[k] <- best_trees
+  cat("  Best iteration (trees):", best_trees, "\n")
+  
+  # Predict on held-out fold
+  preds <- predict.gbm(
+    model_k,
+    newdata = test_fold,
+    type = "response",
+    n.trees = best_trees
+  )
+  
+  # Evaluate AUC
+  roc_obj <- roc(test_fold[, 3], preds)
+  auc_scores[k] <- auc(roc_obj)
+  
+  # variable importance
+  imp <- summary(model_k, plotit = FALSE)
+  imp$Fold <- k
+  all_importances[[k]] <- imp
+}
+
+mean_auc <- mean(auc_scores)
+print(paste("Mean AUC across folds:", round(mean_auc, 3)))
+```
+
+Compute final model with new params
+```{r}
+final_modelGL <- gbm.fixed(
+  data = GL,
+  gbm.x = gbm_x_indices,   # cleaned feature set
+  gbm.y = 3,
+  family = "bernoulli",
+  var.monotone = c(-1,0,-1,0,0,0,1,0,0,0), # update
+  tree.complexity = 5,
+  learning.rate = 0.005,
+  n.trees = 15000,  # update
+  bag.fraction = 0.75
+)
+
+(best.iter=gbm.perf(final_modelGL, method="OOB"))
+saveRDS(final_modelGL, "interim_GL.Rds")
+```
+
+
+
+################
+
 ```{r}
 # get a list of predictors in alphabetical order
-a<-summary(BRT.background1, n.trees=best.iterb)$var
+a<-summary(final_modelunmod, n.trees=best.iterb)$var
 sorted<-sort(a)
 sorted
 ```
 
-```{r}
-# GL vs unmod
-summary(BRT.crwGL, n.trees=best.iterGL) #rec boats, community, ZooL_N, temp, mangroves, salt
-summary(BRT.crwunmod, n.trees=best.iterunmod) #rec boats, reefs, current, rivers, salt, mmpfrequ
-```
+
 ```{r}
 b<-summary(BRT.background1, n.trees=best.iterb)
 GLb<-summary(BRT.backgroundGL, n.trees=best.iterGLb)
@@ -368,7 +845,9 @@ pred=predict.gbm(BRT.crw,newdata=test_data,type="response", n.trees=BRT.crw$gbm.
 
 predGL=predict.gbm(BRT.crwGL,newdata=test_dataGL,type="response", n.trees=BRT.crwGL$gbm.call$best.trees,na.rm=F)
 
-predunmod=predict.gbm(BRT.crwunmod,newdata=test_dataunmodified,type="response", n.trees=BRT.crwunmod$gbm.call$best.trees,na.rm=F)
+predunmod=predict.gbm(BRT.crwunmodbathy,newdata=test_dataunmodified,type="response", n.trees=BRT.crwunmodbathy$gbm.call$best.trees,na.rm=F)
+
+predunmodc=predict.gbm(BRT.crwunmodcoast,newdata=test_dataunmodified,type="response", n.trees=BRT.crwunmodcoast$gbm.call$best.trees,na.rm=F)
 ```
 https://besjournals.onlinelibrary.wiley.com/doi/10.1111/j.1365-2656.2008.01390.x#b18 
 https://rspatial.org/raster/sdm/6_sdm_methods.html
@@ -386,6 +865,8 @@ Evaluations_7525 <- as.data.frame(matrix(data=0,nrow=1,ncol=3))
   Evaluations_7525[1,1] <- e@auc
   Evaluations_7525[1,2] <- max(e@TPR + e@TNR-1)
   Evaluations_7525[1,3] <- mean(e@TPR)
+  
+  
   
 (Evaluations_7525)
 eval<-c(names(Evaluations_7525), "% deviance explained")

@@ -11,7 +11,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r}
 source("LoadPackages_PA.R")
 library(sf)
-library(iml)
+#library(iml)
 ```
 
 
@@ -793,7 +793,7 @@ final_modelGL <- gbm.fixed(
   var.monotone = c(-1,0,-1,0,0,0,1,0,0,0), # update
   tree.complexity = 5,
   learning.rate = 0.005,
-  n.trees = 15000,  # update
+  n.trees = 20000,  # update
   bag.fraction = 0.75
 )
 
@@ -801,225 +801,164 @@ final_modelGL <- gbm.fixed(
 saveRDS(final_modelGL, "interim_GL.Rds")
 ```
 
+Run with final configuration
+```{r}
+vars_to_drop <- c('dist2coast1_2', 'geohab', 'geomorph', 'bathy1', 'slope1', 'EFI', 'mean_cur', 'mean_wspeed', 'Secchi', 'ZooL_N', 'ruggedness1', 'mmpexposure1') # update this!
+selected_vars <- names(GL)[c(6:9, 11:19, 22, 25:27, 30:34)]
+final_vars <- setdiff(selected_vars, vars_to_drop)
+gbm_x_indices <- which(names(GL) %in% final_vars)
+
+set.seed(42)
+
+final_modelGL <- gbm.fixed(
+  data = GL,
+  gbm.x = gbm_x_indices,   # cleaned feature set
+  gbm.y = 3,
+  family = "bernoulli",
+  var.monotone = c(-1,0,-1,0,0,0,1,0,0,0), # update
+  tree.complexity = 5,
+  learning.rate = 0.005,
+  n.trees = 20000,  # update
+  bag.fraction = 0.75
+)
+saveRDS(final_modelGL, "final_modelGL.Rds")
+```
 
 
 ################
 
+load models
+```{r}
+final_modelunmod<-readRDS("final_unmod.Rds")
+final_modelGL<-readRDS("final_modelGL.Rds")
+#final_modelALL<-readRDS("final_modelALL.Rds")
+
+(best.iter=gbm.perf(final_modelunmod, method="OOB"))
+(best.iterGL=gbm.perf(final_modelGL, method="OOB"))
+#(best.iterALL=gbm.perf(final_modelALL, method="OOB"))
+```
+
+
 ```{r}
 # get a list of predictors in alphabetical order
-a<-summary(final_modelunmod, n.trees=best.iterb)$var
+a<-summary(final_modelunmod, n.trees=best.iter)$var
 sorted<-sort(a)
 sorted
 ```
 
 
 ```{r}
-b<-summary(BRT.background1, n.trees=best.iterb)
-GLb<-summary(BRT.backgroundGL, n.trees=best.iterGLb)
-unmodb<-summary(BRT.backgroundunmod, n.trees=best.iterunmodb)
-c<-summary(BRT.crw, n.trees=best.iter)
-GLc<-summary(BRT.crwGL, n.trees=best.iterGL)
-unmodc<-summary(BRT.crwunmod, n.trees=best.iterunmod)
+unmodc<-summary(final_modelunmod, n.trees=best.iter)
+GLc<-summary(final_modelGL, n.trees=best.iterGL)
+# ALLc<-summary(final_modelALL, n.trees=best.iterALL)
 
-combined_df<-reduce(list(b, GLb, unmodb, c, GLc, unmodc), full_join, by="var")
+combined_df<-reduce(list(unmodc, GLc), full_join, by="var")
 b.df<-combined_df%>%
-  rename(background_all=rel.inf.x,
-         background_modified=rel.inf.y,
-         background_unmodified=rel.inf.x.x, 
-         crw_all=rel.inf.y.y, 
-         crw_modified=rel.inf.x.x.x, 
-         crw_unmodified=rel.inf.y.y.y)%>%arrange(tolower(var))
+  rename(unmodified=rel.inf.x,
+         modified=rel.inf.y)%>%arrange(tolower(var))
 b.df
 
 # rename stuff for plotting
 names(b.df)[names(b.df)=="var"]<-"Variable"
-b.df$"Variable"<-c("Bathymetry", "Seagrass community type", "Distance to mangroves", "Distance to coast", "Distance to boat ramps", "Distance to reefs", "Distance to rivers", "Ecology fine inorganics", "Geohabitat", "Geomorphology", "Mean seawater velocity", "Mean wind speed", "Chronic exposure to floodwater", "Acute flood frequency", "Ruggedness", "Salinity", "Seagrass probability", "Secchi depth", "Slope", "Temperature", "Tidal exposure", "Large zooplankton nitrogen")
+b.df$"Variable"<-c("Distance to Reefs",
+                   "Means seawater velocity", 
+                   "Distance to boat ramps", 
+                   "Acute flood frequency", 
+                   "Salinity", 
+                   "Tidal exposure", 
+                   "Distance to coast",
+                   "Distance to mangroves", 
+                   "Distance to rivers", 
+                   "Ruggedness", 
+                   "Temperature", 
+                   "Chronic floodwater exposure", 
+                   "Seagrass community type", 
+                   "Seagrass probability")
 ```
 
 
+Predict on the full dataset
 
 ```{r}
 #source("PA-paper/ModelFunctions.R")
 #source("PA-paper/Model_Eval_Fcns.R")
-pred=predict.gbm(BRT.crw,newdata=test_data,type="response", n.trees=BRT.crw$gbm.call$best.trees,na.rm=F)
-
-predGL=predict.gbm(BRT.crwGL,newdata=test_dataGL,type="response", n.trees=BRT.crwGL$gbm.call$best.trees,na.rm=F)
-
-predunmod=predict.gbm(BRT.crwunmodbathy,newdata=test_dataunmodified,type="response", n.trees=BRT.crwunmodbathy$gbm.call$best.trees,na.rm=F)
-
-predunmodc=predict.gbm(BRT.crwunmodcoast,newdata=test_dataunmodified,type="response", n.trees=BRT.crwunmodcoast$gbm.call$best.trees,na.rm=F)
+predunmod <- predict.gbm(
+  final_modelunmod,
+  newdata = unmodified,
+  type = "response",
+  n.trees = best.iter
+)
+predGL <- predict.gbm(
+  final_modelGL,
+  newdata = GL,
+  type = "response",
+  n.trees = best.iterGL
+)
 ```
 https://besjournals.onlinelibrary.wiley.com/doi/10.1111/j.1365-2656.2008.01390.x#b18 
 https://rspatial.org/raster/sdm/6_sdm_methods.html
+
+Unmod diagnostics
 ```{r}
 #AUC and TSS (true skill statistic)- predictive skill
-
-Evaluations_7525 <- as.data.frame(matrix(data=0,nrow=1,ncol=3))
-  colnames(Evaluations_7525) <- c("AUC","TSS","TPR")
+obs<- unmodified$data_type
+Evaluations_full <- as.data.frame(matrix(data=0,nrow=1,ncol=3))
+  colnames(Evaluations_full) <- c("AUC","TSS","TPR")
 #dev <- calc.deviance(obs=test_data$data_type, pred=pred, calc.mean=TRUE)
 #roc<-roc(test_data$data_type, pred)
-  d <- cbind(test_data$data_type, pred)
+  d <- cbind(obs, predunmod)
   pres <- d[d[,1]==1,2]
   abs <- d[d[,1]==0,2]
   e <- evaluate(p=pres, a=abs)
-  Evaluations_7525[1,1] <- e@auc
-  Evaluations_7525[1,2] <- max(e@TPR + e@TNR-1)
-  Evaluations_7525[1,3] <- mean(e@TPR)
+  Evaluations_full[1,1] <- e@auc
+  Evaluations_full[1,2] <- max(e@TPR + e@TNR-1)
+  Evaluations_full[1,3] <- mean(e@TPR)
   
   
   
-(Evaluations_7525)
-eval<-c(names(Evaluations_7525), "% deviance explained")
-b.df[23:26,1]<-eval
-b.df[23,5]<-Evaluations_7525[,1]
-b.df[24,5]<-Evaluations_7525[,2]
-b.df[25,5]<-Evaluations_7525[,3]
+(Evaluations_full)
+eval<-c(names(Evaluations_full), "% deviance explained")
+b.df[15:18,1]<-eval
+b.df[15,2]<-Evaluations_full[,1]
+b.df[16,2]<-Evaluations_full[,2]
+b.df[17,2]<-Evaluations_full[,3]
 ```
 AUC of 0.5 means the model is just as good as a random guess. AUC varies with spatial extent used to select background points. Larger extent, higher AUC. 
 
 # Deviance explained - explanatory power
 ```{r}
-x<-(BRT.crw$self.statistics$null.deviance-BRT.crw$self.statistics$resid.deviance)/BRT.crw$self.statistics$null.deviance
-b.df[26,5]<-x
+x<-(final_modelunmod$self.statistics$null.deviance-final_modelunmod$self.statistics$resid.deviance)/final_modelunmod$self.statistics$null.deviance
+b.df[18,2]<-x
 ```
-GL and unmod diagnostics
+
+GL diagnostics
 ```{r}
 #AUC and TSS (true skill statistic)- predictive skill
 
-Evaluations_7525GL <- as.data.frame(matrix(data=0,nrow=1,ncol=3))
-  colnames(Evaluations_7525GL) <- c("AUC","TSS","TPR")
+Evaluations_fullGL <- as.data.frame(matrix(data=0,nrow=1,ncol=3))
+  colnames(Evaluations_fullGL) <- c("AUC","TSS","TPR")
 #dev <- calc.deviance(obs=test_data$data_type, pred=pred, calc.mean=TRUE)
 #roc<-roc(test_data$data_type, pred)
-  d <- cbind(test_dataGL$data_type, predGL)
+  d <- cbind(GL$data_type, predGL)
   pres <- d[d[,1]==1,2]
   abs <- d[d[,1]==0,2]
   e <- evaluate(p=pres, a=abs)
-  Evaluations_7525GL[1,1] <- e@auc
-  Evaluations_7525GL[1,2] <- max(e@TPR + e@TNR-1)
-  Evaluations_7525GL[1,3] <- mean(e@TPR)
+  Evaluations_fullGL[1,1] <- e@auc
+  Evaluations_fullGL[1,2] <- max(e@TPR + e@TNR-1)
+  Evaluations_fullGL[1,3] <- mean(e@TPR)
   
-(Evaluations_7525GL)
-b.df[23,6]<-Evaluations_7525GL[,1]
-b.df[24,6]<-Evaluations_7525GL[,2]
-b.df[25,6]<-Evaluations_7525GL[,3]
+(Evaluations_fullGL)
+b.df[15,3]<-Evaluations_fullGL[,1]
+b.df[16,3]<-Evaluations_fullGL[,2]
+b.df[17,3]<-Evaluations_fullGL[,3]
   
-Evaluations_7525unmod <- as.data.frame(matrix(data=0,nrow=1,ncol=3))
-  colnames(Evaluations_7525unmod) <- c("AUC","TSS","TPR")
-#dev <- calc.deviance(obs=test_data$data_type, pred=pred, calc.mean=TRUE)
-#roc<-roc(test_data$data_type, pred)
-  d <- cbind(test_dataunmodified$data_type, predunmod)
-  pres <- d[d[,1]==1,2]
-  abs <- d[d[,1]==0,2]
-  e <- evaluate(p=pres, a=abs)
-  Evaluations_7525unmod[1,1] <- e@auc
-  Evaluations_7525unmod[1,2] <- max(e@TPR + e@TNR-1)
-  Evaluations_7525unmod[1,3] <- mean(e@TPR)
-  
-(Evaluations_7525unmod)
-b.df[23,7]<-Evaluations_7525unmod[,1]
-b.df[24,7]<-Evaluations_7525unmod[,2]
-b.df[25,7]<-Evaluations_7525unmod[,3]
+Evaluations_fullunmod <- as.data.frame(matrix(data=0,nrow=1,ncol=3))
+  colnames(Evaluations_fullunmod) <- c("AUC","TSS","TPR")
 ```
 ```{r}
 #GL
-y<-(BRT.crwGL$self.statistics$null.deviance-BRT.crwGL$self.statistics$resid.deviance)/BRT.crwGL$self.statistics$null.deviance
-b.df[26,6]<-y
-
-#unmod
-z<-(BRT.crwunmod$self.statistics$null.deviance-BRT.crwunmod$self.statistics$resid.deviance)/BRT.crwunmod$self.statistics$null.deviance
-b.df[26,7]<-z
-```
-
-
-#####background
-```{r}
-predb=predict.gbm(BRT.background1,newdata=test_data_b,type="response", n.trees=BRT.background1$gbm.call$best.trees,na.rm=F)
-
-predGLb=predict.gbm(BRT.backgroundGL,newdata=test_dataGL_b,type="response", n.trees=BRT.backgroundGL$gbm.call$best.trees,na.rm=F)
-
-predunmodb=predict.gbm(BRT.backgroundunmod,newdata=test_dataunmodified_b,type="response", n.trees=BRT.backgroundunmod$gbm.call$best.trees,na.rm=F)
-```
-https://besjournals.onlinelibrary.wiley.com/doi/10.1111/j.1365-2656.2008.01390.x#b18 
-https://rspatial.org/raster/sdm/6_sdm_methods.html
-```{r}
-#AUC and TSS (true skill statistic)- predictive skill
-
-Evaluations_7525 <- as.data.frame(matrix(data=0,nrow=1,ncol=3))
-  colnames(Evaluations_7525) <- c("AUC","TSS","TPR")
-#dev <- calc.deviance(obs=test_data$data_type, pred=pred, calc.mean=TRUE)
-#roc<-roc(test_data$data_type, pred)
-  d <- cbind(test_data_b$data_type, predb)
-  pres <- d[d[,1]==1,2]
-  abs <- d[d[,1]==0,2]
-  e <- evaluate(p=pres, a=abs)
-  Evaluations_7525[1,1] <- e@auc
-  Evaluations_7525[1,2] <- max(e@TPR + e@TNR-1)
-  Evaluations_7525[1,3] <- mean(e@TPR)
-  
-(Evaluations_7525)
-transposed<-t(Evaluations_7525)
-#eval<-c(names(Evaluations_7525), "% deviance explained")
-b.df[23:26,1]<-eval
-b.df[23,2]<-Evaluations_7525[,1]
-b.df[24,2]<-Evaluations_7525[,2]
-b.df[25,2]<-Evaluations_7525[,3]
-```
-AUC of 0.5 means the model is just as good as a random guess. AUC varies with spatial extent used to select background points. Larger extent, higher AUC. 
-TSS= true skill statistic
-TPR= true presence rate, correctly predicted presence observations over total presences (aka sensitivity or hit rate)
-
-# Deviance explained - explanatory power
-```{r}
-a<-(BRT.background1$self.statistics$null.deviance-BRT.background1$self.statistics$resid.deviance)/BRT.background1$self.statistics$null.deviance
-b.df[26,2]<-a
-```
-GL and unmod diagnostics
-```{r}
-#AUC and TSS (true skill statistic)- predictive skill
-
-Evaluations_7525GL <- as.data.frame(matrix(data=0,nrow=1,ncol=3))
-  colnames(Evaluations_7525GL) <- c("AUC","TSS","TPR")
-#dev <- calc.deviance(obs=test_data$data_type, pred=pred, calc.mean=TRUE)
-#roc<-roc(test_data$data_type, pred)
-  d <- cbind(test_dataGL_b$data_type, predGLb)
-  pres <- d[d[,1]==1,2]
-  abs <- d[d[,1]==0,2]
-  e <- evaluate(p=pres, a=abs)
-  Evaluations_7525GL[1,1] <- e@auc
-  Evaluations_7525GL[1,2] <- max(e@TPR + e@TNR-1)
-  Evaluations_7525GL[1,3] <- mean(e@TPR)
-  
-(Evaluations_7525GL)
-b.df[23,3]<-Evaluations_7525GL[,1]
-b.df[24,3]<-Evaluations_7525GL[,2]
-b.df[25,3]<-Evaluations_7525GL[,3]
-```
-```{r}
-Evaluations_7525unmod <- as.data.frame(matrix(data=0,nrow=1,ncol=3))
-  colnames(Evaluations_7525unmod) <- c("AUC","TSS","TPR")
-#dev <- calc.deviance(obs=test_data$data_type, pred=pred, calc.mean=TRUE)
-#roc<-roc(test_data$data_type, pred)
-  d <- cbind(test_dataunmodified_b$data_type, predunmodb)
-  pres <- d[d[,1]==1,2]
-  abs <- d[d[,1]==0,2]
-  e <- evaluate(p=pres, a=abs)
-  Evaluations_7525unmod[1,1] <- e@auc
-  Evaluations_7525unmod[1,2] <- max(e@TPR + e@TNR-1)
-  Evaluations_7525unmod[1,3] <- mean(e@TPR)
-  
-(Evaluations_7525unmod)
-b.df[23,4]<-Evaluations_7525unmod[,1]
-b.df[24,4]<-Evaluations_7525unmod[,2]
-b.df[25,4]<-Evaluations_7525unmod[,3]
-```
-```{r}
-#GL
-b<-(BRT.backgroundGL$self.statistics$null.deviance-BRT.backgroundGL$self.statistics$resid.deviance)/BRT.backgroundGL$self.statistics$null.deviance
-
-#unmod
-c<-(BRT.backgroundunmod$self.statistics$null.deviance-BRT.backgroundunmod$self.statistics$resid.deviance)/BRT.backgroundunmod$self.statistics$null.deviance
-b.df[26,3]<-b
-b.df[26,4]<-c
+y<-(final_modelGL$self.statistics$null.deviance-final_modelGL$self.statistics$resid.deviance)/final_modelGL$self.statistics$null.deviance
+b.df[18,3]<-y
 ```
 
 
@@ -1027,29 +966,30 @@ b.df[26,4]<-c
 ```{r}
 library(gt)
 library(webshot2)
-threshold<-100/22
+threshold1<-100/12
+threshold2<-100/10
 
 # Ensure columns are numeric and handle NAs
-b.df[, c("background_all", "background_modified", "background_unmodified", "crw_all", "crw_modified", "crw_unmodified")] <- 
-  lapply(b.df[, c("background_all", "background_modified", "background_unmodified", "crw_all", "crw_modified", "crw_unmodified")], 
+b.df[, c("unmodified", "modified")] <- 
+  lapply(b.df[, c("unmodified", "modified")], 
          function(x) as.numeric(x))
 
 gt_table <- b.df %>% 
   gt() %>%
   # Color the cells based on their values, excluding the last 4 rows
   data_color(
-    columns = c("background_all", "background_modified", "background_unmodified", "crw_all", "crw_modified", "crw_unmodified"),
+    columns = c("unmodified", "modified"),
     rows = 1:(nrow(b.df)-4), # Exclude the last 4 rows
         fn = function(x) {
       # Use scales::col_numeric to create a color function
       scales::col_numeric(
         palette = c("blue", "yellow", "red"),
-        domain = range(b.df[,2:4], na.rm = TRUE)
+        domain = range(b.df[,2:3], na.rm = TRUE)
       )(x)
     }
   ) %>%
   fmt_number(
-    columns = c("background_all", "background_modified", "background_unmodified", "crw_all", "crw_modified", "crw_unmodified"),
+    columns = c("unmodified", "modified"),
     decimals = 2 # Format numbers to two decimal places
   ) 
   
@@ -1062,28 +1002,12 @@ gt_table <- b.df %>%
     ),
     locations = list(
         cells_body(
-          columns = background_all, 
-          rows = background_all>threshold
+          columns = unmodified, 
+          rows = unmodified>threshold1
         ),
-        cells_body(
-          columns = background_modified, 
-          rows = background_modified>threshold
-        ), 
-        cells_body(
-          columns = background_unmodified, 
-          rows = background_unmodified>threshold
-        ), 
          cells_body(
-          columns = crw_all, 
-          rows = crw_all>threshold
-        ), 
-         cells_body(
-          columns = crw_modified, 
-          rows = crw_modified>threshold
-        ), 
-         cells_body(
-          columns = crw_unmodified, 
-          rows = crw_unmodified>threshold
+          columns = modified, 
+          rows = modified>threshold2
         )
   )
 )%>%tab_spanner_delim(
@@ -1123,118 +1047,16 @@ yhat
 
 
 ```{r}
-
-nms <- colnames(train_data_b)
-new_x_labels <- c("Distance to boat ramps", "Ecology fine inorganics", "Acute flood frequency")
-
-p <- vector('list', 3)
-names(p) <- nms[c(13,32,17)] #change these according to model rank list
-for (j in seq_along(nms[c(13,32,17)])) {
-  nm <- nms[c(13,32,17)][j]
+nms <- colnames(unmodified)
+r <- vector('list', 5)
+new_x_labels <- c("Distance to reefs", "Mean seawater velocity", "Distance to boat ramps", "Acute flood frequency", "Salinity")
+names(r) <- nms[c(11,27,13,16,25)] #change these according to model rank list
+for (j in seq_along(nms[c(11,27,13,16,25)])) {
+  nm <- nms[c(11,27,13,16,25)][j]
   print(nm)
-  p[[nm]] <- BRT.backgroundGL %>% pdp::partial(pred.var=nm,
-                                 n.trees=best.iterGLb,
-                                 train=train_data_b,
-                                 # inv.link=plogis,
-                                 # recursive=FALSE,
-                                 type='regression') %>%
-    autoplot()+theme_classic() +
-    labs(x=new_x_labels[j])
-  
-  if (nm == "COMMUNITY") { # Rotate x-axis tick labels in the first panel
-    p[[nm]] <- p[[nm]] + theme(axis.text.x = element_text(angle = 90, hjust = 1))+
-                                 scale_x_discrete(labels = function(x) {
-        x[x == "Non-seagrass habitat"] <- "NSG"
-        return(x)
-      })
-  }
- #+ ylim(0, 1)
-}
-
-plot<-do.call('grid.arrange', p)
-
-library(grid)
-title <- textGrob("A- Background, modified", x = unit(0, "npc"), just = "left", gp = gpar(fontsize = 16))
-
-# Combine the title and the plot
-final_plot <- arrangeGrob(plot, top = title)
-final_plot
-ggsave("backgroundGL.partial.png", final_plot, width=8, height=6)
-# which categories best predict presence
-pdp_df <- BRT.backgroundGL %>% pdp::partial(pred.var='COMMUNITY',
-                                 n.trees=best.iterGLb,
-                                 train=train_data_b,
-                                 # inv.link=plogis,
-                                 # recursive=FALSE,
-                                 type='regression')
-
-# Now, sort the data frame by the predicted probabilities (assuming 'y' column contains these)
-sorted_pdp <- pdp_df[order(pdp_df$y, decreasing = TRUE), ]
-
-# If you want to view the sorted categories alongside their probabilities
-print(sorted_pdp)
-```
-
-```{r}
-q <- vector('list', 5)
-new_x_labels <- c("Seagrass community type", "Distance to coast", "Acute flood frequency", "Salinity", "Seagrass probability")
-
-names(q) <- nms[c(34,12,16,25,14)] #change these according to model rank list
-for (j in seq_along(nms[c(34,12,16,25,14)])) {
-  nm <- nms[c(34,12,16,25,14)][j]
-  print(nm)
-  q[[nm]] <- BRT.backgroundunmod %>% pdp::partial(pred.var=nm,
-                                 n.trees=best.iterunmodb,
-                                 train=train_data_b,
-                                 #inv.link=plogis,
-                                 #recursive=FALSE,
-                                 type='regression') %>%
-    autoplot()+theme_classic() +# + ylim(0, 1)
-
-    labs(x=new_x_labels[j])
-  if (nm == "COMMUNITY") { # Rotate x-axis tick labels in the first panel
-    q[[nm]] <- q[[nm]] + theme(axis.text.x = element_text(angle = 90, hjust = 1))+
-                                 scale_x_discrete(labels = function(x) {
-        x[x == "Non-seagrass habitat"] <- "NSG"
-        return(x)
-      })
-  }
-}
- 
-plot<-do.call('grid.arrange', q)
-
-title <- textGrob("B- Background, unmodified", x = unit(0, "npc"), just = "left", gp = gpar(fontsize = 16))
-
-# Combine the title and the plot
-final_plot <- arrangeGrob(plot, top = title)
-final_plot
-ggsave("backgroundunmod.partial.png", final_plot, width=8, height=6)
-# which categories best predict presence
-pdp_df <- BRT.backgroundunmod %>% pdp::partial(pred.var='COMMUNITY',
-                                 n.trees=best.iterunmodb,
-                                 train=train_data_b,
-                                 # inv.link=plogis,
-                                 # recursive=FALSE,
-                                 type='regression')
-
-# Now, sort the data frame by the predicted probabilities (assuming 'y' column contains these)
-sorted_pdp <- pdp_df[order(pdp_df$y, decreasing = TRUE), ]
-
-# If you want to view the sorted categories alongside their probabilities
-print(sorted_pdp)
-```
-## crw
-```{r}
-nms <- colnames(train_data)
-r <- vector('list', 8)
-new_x_labels <- c("Seagrass community type", "Distance to mangroves", "Distance to boat ramps", "Distance to rivers", "Salinity", "Seagrass probability", "Temperature", "Large zooplankton nitrogen")
-names(r) <- nms[c(34,22,13,9,25,14,26,31)] #change these according to model rank list
-for (j in seq_along(nms[c(34,22,13,9,25,14,26,31)])) {
-  nm <- nms[c(34,22,13,9,25,14,26,31)][j]
-  print(nm)
-  r[[nm]] <- BRT.crwGL %>% pdp::partial(pred.var=nm,
-                                 n.trees=best.iterGL,
-                                 train=train_data,
+  r[[nm]] <- final_modelunmod %>% pdp::partial(pred.var=nm,
+                                 n.trees=best.iter,
+                                 train=unmodified,
                                  #inv.link=plogis,
                                  #recursive=FALSE,
                                  type='regression') %>%
@@ -1251,41 +1073,41 @@ for (j in seq_along(nms[c(34,22,13,9,25,14,26,31)])) {
 }
  
 plot<-do.call('grid.arrange', r)
-
-title <- textGrob("C- CRW, modified", x = unit(0, "npc"), just = "left", gp = gpar(fontsize = 16))
+library(forestplot)
+title <- textGrob("A- CRW, unmodified", x = unit(0, "npc"), just = "left", gp = gpar(fontsize = 16))
 
 # Combine the title and the plot
 final_plot <- arrangeGrob(plot, top = title)
 final_plot
-ggsave("CRWGL.partial.png", final_plot, width=10, height=8)
+ggsave("CRWunmod.partial.png", final_plot, width=10, height=8)
  
 
-
-# which categories best predict presence
-pdp_df <- BRT.crwGL %>% pdp::partial(pred.var='COMMUNITY',
-                                 n.trees=best.iterGL,
-                                 train=train_data,
-                                 # inv.link=plogis,
-                                 # recursive=FALSE,
-                                 type='regression')
-
-# Now, sort the data frame by the predicted probabilities (assuming 'y' column contains these)
-sorted_pdp <- pdp_df[order(pdp_df$y, decreasing = TRUE), ]
-
-# If you want to view the sorted categories alongside their probabilities
-print(sorted_pdp)
+# 
+# # which categories best predict presence
+# pdp_df <- final_modelunmod %>% pdp::partial(pred.var='COMMUNITY',
+#                                  n.trees=best.iterGL,
+#                                  train=train_data,
+#                                  # inv.link=plogis,
+#                                  # recursive=FALSE,
+#                                  type='regression')
+# 
+# # Now, sort the data frame by the predicted probabilities (assuming 'y' column contains these)
+# sorted_pdp <- pdp_df[order(pdp_df$y, decreasing = TRUE), ]
+# 
+# # If you want to view the sorted categories alongside their probabilities
+# print(sorted_pdp)
 ```
 
 ```{r}
-s <- vector('list', 8)
-names(s) <- nms[c(22,13,11,9,27,16,25,15)] #change these according to model rank list
-new_x_labels <- c("Distance to mangroves", "Distance to boat ramps", "Distance to reefs", "Distance to rivers", "Mean seawater velocity", "Acute flood frequency", "Salinity", "Temperature")
-for (j in seq_along(nms[c(22,13,11,9,27,16,25,15)])) {
-  nm <- nms[c(22,13,11,9,27,16,25,15)][j]
+s <- vector('list', 5)
+names(s) <- nms[c(13,26,11,25,34)] #change these according to model rank list
+new_x_labels <- c("Distance to boat ramps", "Temperature", "Distance to reefs", "Salinity", "Seagrass community type")
+for (j in seq_along(nms[c(13,26,11,25,34)])) {
+  nm <- nms[c(13,26,11,25,34)][j]
   print(nm)
-  s[[nm]] <- BRT.crwunmod %>% pdp::partial(pred.var=nm,
-                                 n.trees=best.iter,
-                                 train=train_data,
+  s[[nm]] <- final_modelGL %>% pdp::partial(pred.var=nm,
+                                 n.trees=best.iterGL,
+                                 train=GL,
                                  #inv.link=plogis,
                                  #recursive=FALSE,
                                  type='regression') %>%
@@ -1303,16 +1125,16 @@ for (j in seq_along(nms[c(22,13,11,9,27,16,25,15)])) {
  
 plot<-do.call('grid.arrange', s)
 
-title <- textGrob("D- CRW, unmodified", x = unit(0, "npc"), just = "left", gp = gpar(fontsize = 16))
+title <- textGrob("D- CRW, modified", x = unit(0, "npc"), just = "left", gp = gpar(fontsize = 16))
 
 # Combine the title and the plot
 final_plot <- arrangeGrob(plot, top = title)
 final_plot
-ggsave("CRWunmod.partial.png", final_plot, width=8, height=6)
-# which categories best predict presence
-pdp_df <- BRT.crwunmod %>% pdp::partial(pred.var='COMMUNITY',
-                                 n.trees=best.iterunmod,
-                                 train=train_data,
+ggsave("CRWGL.partial.png", final_plot, width=8, height=6)
+# # which categories best predict presence
+pdp_df <- final_modelGL %>% pdp::partial(pred.var='COMMUNITY',
+                                 n.trees=best.iterGL,
+                                 train=GL,
                                  # inv.link=plogis,
                                  # recursive=FALSE,
                                  type='regression')
@@ -1342,84 +1164,7 @@ bhattacharyya_distance <- function(mu1, sigma1, mu2, sigma2) {
 }
 ```
 
-```{r}
-#library(pfc)
-track_filtered<-data_join_b%>%filter(data_type==1)
-background_filtered<-data_join_b%>%filter(data_type==0)
-# MMP exposure
-# using formula:
-mu1<-mean(track_filtered$mmpexposure1, na.rm=T)
-sigma1<-var(track_filtered$mmpexposure1, na.rm=T)
-mu2<-mean(background_filtered$mmpexposure1, na.rm=T)
-sigma2<-var(background_filtered$mmpexposure1, na.rm=T)
-bhattacharyya_distance(mu1, sigma1, mu2, sigma2)
 
-# coefficient
-sqrt(2 * sigma1 * sigma2 / (sigma1^2 + sigma2^2)) * exp(-1/4 * ((mu1 - mu2)^2 / (sigma1^2 + sigma2^2)))
-
-
-mu1<-mean(track_filtered$dist2recboatfeat, na.rm=T)
-sigma1<-var(track_filtered$dist2recboatfeat, na.rm=T)
-mu2<-mean(background_filtered$dist2recboatfeat, na.rm=T)
-sigma2<-var(background_filtered$dist2recboatfeat, na.rm=T)
-bhattacharyya_distance(mu1, sigma1, mu2, sigma2)
-
-# coefficient
-sqrt(2 * sigma1 * sigma2 / (sigma1^2 + sigma2^2)) * exp(-1/4 * ((mu1 - mu2)^2 / (sigma1^2 + sigma2^2)))
-
-
-mu1<-mean(track_filtered$EFI, na.rm=T)
-sigma1<-var(track_filtered$EFI, na.rm=T)
-mu2<-mean(background_filtered$EFI, na.rm=T)
-sigma2<-var(background_filtered$EFI, na.rm=T)
-bhattacharyya_distance(mu1, sigma1, mu2, sigma2)
-
-# coefficient
-sqrt(2 * sigma1 * sigma2 / (sigma1^2 + sigma2^2)) * exp(-1/4 * ((mu1 - mu2)^2 / (sigma1^2 + sigma2^2)))
-
-mu1<-mean(track_filtered$seagrassP1, na.rm=T)
-sigma1<-var(track_filtered$seagrassP1, na.rm=T)
-mu2<-mean(background_filtered$seagrassP1, na.rm=T)
-sigma2<-var(background_filtered$seagrassP1, na.rm=T)
-bhattacharyya_distance(mu1, sigma1, mu2, sigma2)
-
-# coefficient
-sqrt(2 * sigma1 * sigma2 / (sigma1^2 + sigma2^2)) * exp(-1/4 * ((mu1 - mu2)^2 / (sigma1^2 + sigma2^2)))
-
-mu1<-mean(track_filtered$dist2coast, na.rm=T)
-sigma1<-var(track_filtered$dist2coast, na.rm=T)
-mu2<-mean(background_filtered$dist2coast1, na.rm=T)
-sigma2<-var(background_filtered$dist2coast, na.rm=T)
-# coefficient
-sqrt(2 * sigma1 * sigma2 / (sigma1^2 + sigma2^2)) * exp(-1/4 * ((mu1 - mu2)^2 / (sigma1^2 + sigma2^2)))
-
-mu1<-mean(track_filtered$mmpfrequency1, na.rm=T)
-sigma1<-var(track_filtered$mmpfrequency1, na.rm=T)
-mu2<-mean(background_filtered$mmpfrequency1, na.rm=T)
-sigma2<-var(background_filtered$mmpfrequency1, na.rm=T)
-# coefficient
-sqrt(2 * sigma1 * sigma2 / (sigma1^2 + sigma2^2)) * exp(-1/4 * ((mu1 - mu2)^2 / (sigma1^2 + sigma2^2)))
-
-mu1<-mean(track_filtered$deamangrove, na.rm=T)
-sigma1<-var(track_filtered$deamangrove, na.rm=T)
-mu2<-mean(background_filtered$deamangrove, na.rm=T)
-sigma2<-var(background_filtered$deamangrove, na.rm=T)
-# coefficient
-sqrt(2 * sigma1 * sigma2 / (sigma1^2 + sigma2^2)) * exp(-1/4 * ((mu1 - mu2)^2 / (sigma1^2 + sigma2^2)))
-
-#### categorical
-
-levels <- union(track_filtered$COMMUNITY, background_filtered$COMMUNITY)
-sample1_factor <- factor(track_filtered$COMMUNITY, levels = levels)
-sample2_factor <- factor(background_filtered$COMMUNITY, levels = levels)
-
-# Calculate probabilities for each category in both samples
-prob1 <- table(sample1_factor) / length(sample1_factor)
-prob2 <- table(sample2_factor) / length(sample2_factor)
-
-# Calculate the Bhattacharyya coefficient
-BC <- sum(sqrt(prob1 * prob2))
-```
 ### crw
 ```{r}
 track_filtered<-data_join%>%filter(data_type==1)
@@ -1432,10 +1177,10 @@ sigma2<-var(crw_filtered$dist2recboatfeat, na.rm=T)
 sqrt(2 * sigma1 * sigma2 / (sigma1^2 + sigma2^2)) * exp(-1/4 * ((mu1 - mu2)^2 / (sigma1^2 + sigma2^2)))
 
 
-mu1<-mean(track_filtered$ZooL_N, na.rm=T)
-sigma1<-var(track_filtered$ZooL_N, na.rm=T)
-mu2<-mean(crw_filtered$ZooL_N, na.rm=T)
-sigma2<-var(crw_filtered$ZooL_N, na.rm=T)
+mu1<-mean(track_filtered$salt, na.rm=T)
+sigma1<-var(track_filtered$salt, na.rm=T)
+mu2<-mean(crw_filtered$salt, na.rm=T)
+sigma2<-var(crw_filtered$salt, na.rm=T)
 # coefficient
 sqrt(2 * sigma1 * sigma2 / (sigma1^2 + sigma2^2)) * exp(-1/4 * ((mu1 - mu2)^2 / (sigma1^2 + sigma2^2)))
 
@@ -1447,10 +1192,10 @@ sigma2<-var(crw_filtered$mean_cur, na.rm=T)
 # coefficient
 sqrt(2 * sigma1 * sigma2 / (sigma1^2 + sigma2^2)) * exp(-1/4 * ((mu1 - mu2)^2 / (sigma1^2 + sigma2^2)))
 
-mu1<-mean(track_filtered$Dist2Rivers1, na.rm=T)
-sigma1<-var(track_filtered$Dist2Rivers1, na.rm=T)
-mu2<-mean(crw_filtered$Dist2Rivers1, na.rm=T)
-sigma2<-var(crw_filtered$Dist2Rivers1, na.rm=T)
+mu1<-mean(track_filtered$mmpfrequency1, na.rm=T)
+sigma1<-var(track_filtered$mmpfrequency1, na.rm=T)
+mu2<-mean(crw_filtered$mmpfrequency1, na.rm=T)
+sigma2<-var(crw_filtered$mmpfrequency1, na.rm=T)
 # coefficient
 sqrt(2 * sigma1 * sigma2 / (sigma1^2 + sigma2^2)) * exp(-1/4 * ((mu1 - mu2)^2 / (sigma1^2 + sigma2^2)))
 
@@ -1468,19 +1213,19 @@ sigma2<-var(crw_filtered$temp, na.rm=T)
 # coefficient
 sqrt(2 * sigma1 * sigma2 / (sigma1^2 + sigma2^2)) * exp(-1/4 * ((mu1 - mu2)^2 / (sigma1^2 + sigma2^2)))
 
-
-#### categorical
-
-levels <- union(track_filtered$COMMUNITY, crw_filtered$COMMUNITY)
-sample1_factor <- factor(track_filtered$COMMUNITY, levels = levels)
-sample2_factor <- factor(crw_filtered$COMMUNITY, levels = levels)
-
-# Calculate probabilities for each category in both samples
-prob1 <- table(sample1_factor) / length(sample1_factor)
-prob2 <- table(sample2_factor) / length(sample2_factor)
-
-# Calculate the Bhattacharyya coefficient
-BC <- sum(sqrt(prob1 * prob2))
+# 
+# #### categorical
+# 
+# levels <- union(track_filtered$COMMUNITY, crw_filtered$COMMUNITY)
+# sample1_factor <- factor(track_filtered$COMMUNITY, levels = levels)
+# sample2_factor <- factor(crw_filtered$COMMUNITY, levels = levels)
+# 
+# # Calculate probabilities for each category in both samples
+# prob1 <- table(sample1_factor) / length(sample1_factor)
+# prob2 <- table(sample2_factor) / length(sample2_factor)
+# 
+# # Calculate the Bhattacharyya coefficient
+# BC <- sum(sqrt(prob1 * prob2))
 ```
 
 
@@ -1488,8 +1233,8 @@ BC <- sum(sqrt(prob1 * prob2))
 # interactions?
 int.size represents the number of times an interaction between the 2 variables is used in the decision trees (i.e. split was made considering both variables together)
 ```{r}
-names(BRT.crw$gbm.call)[1]<-"dataframe"
-find.int<-gbm.interactions(BRT.crw)
+names(final_modelunmod$gbm.call)[1]<-"dataframe"
+find.int<-gbm.interactions(final_modelunmod)
 find.int
 find.int$rank.list
 ```
@@ -1508,39 +1253,27 @@ find.int$rank.list
 ```
 
 ```{r}
-names(BRT.background1$gbm.call)[1]<-"dataframe"
-find.intb<-gbm.interactions(BRT.background1)
-find.intb
-find.intb$rank.list
-```
-```{r}
-names(BRT.backgroundGL$gbm.call)[1]<-"dataframe"
-find.intb<-gbm.interactions(BRT.backgroundGL)
-find.intb
-find.intb$rank.list
-```
-```{r}
-names(BRT.backgroundunmod$gbm.call)[1]<-"dataframe"
-find.intb<-gbm.interactions(BRT.backgroundunmod)
-find.intb
-find.intb$rank.list
+names(final_modelGL$gbm.call)[1]<-"dataframe"
+find.intGL<-gbm.interactions(final_modelGL)
+find.intGL
+find.intGL$rank.list
 ```
 
 Plot pairwise interactions
 ```{r}
-gbm.perspec(BRT.crw, 13,1)
-gbm.perspec(BRT.crw, 23, 16)
-gbm.perspec(BRT.crw, 15,5)
-gbm.perspec(BRT.crw, 23,15)
-gbm.perspec(BRT.crw, 23,12)
+# gbm.perspec(BRT.crw, 13,1)
+# gbm.perspec(BRT.crw, 23, 16)
+# gbm.perspec(BRT.crw, 15,5)
+# gbm.perspec(BRT.crw, 23,15)
+# gbm.perspec(BRT.crw, 23,12)
 ```
 ```{r}
-gbm.perspec(BRT.background1, 13,1)
-gbm.perspec(BRT.backgroundGL, 12,5)
-gbm.perspec(BRT.backgroundunmod, 22, 8)
-gbm.perspec(BRT.crw, 15,5)
-gbm.perspec(BRT.crw, 23,15)
-gbm.perspec(BRT.crw, 23,12)
+# gbm.perspec(BRT.background1, 13,1)
+# gbm.perspec(BRT.backgroundGL, 12,5)
+# gbm.perspec(BRT.backgroundunmod, 22, 8)
+# gbm.perspec(BRT.crw, 15,5)
+# gbm.perspec(BRT.crw, 23,15)
+# gbm.perspec(BRT.crw, 23,12)
 ```
 
 
@@ -1574,13 +1307,14 @@ file_paths_tif <- file_paths_tif[-indices_to_remove]
 
 # # e.g. Find the column number for "Age"
 # column_number <- which(names(df) == "Age")
-variable.names2010 <- c("mask", names(train_data_b)[c(8,34,12,13,11,10,32,6,7,22,27,30,17,16,18,25,14,33,19,26,15,31)]) #here make sure the order is the same as above, if you're using different data
+variable.names2010 <- c("mask", names(unmodified)[c(11,27,13,16,25,15,12,22,9,18,26,17)]) #here make sure the order is the same as above, if you're using different data
 processed_layers <- list() # Initialize an empty list to store processed layers
+modeled.vars<-file_paths_tif[c(1,6,12,5,15,17,22,4,11,7,16,21,14)]
 
-for(i in 1:length(file_paths_tif)) { 
+for(i in 1:length(modeled.vars)) { 
   # Load each .tif file as a RasterLayer object
-  r <- raster(file_paths_tif[i])
-  cat(file_paths_tif[i], "\n")
+  r <- raster(modeled.vars[i])
+  cat(modeled.vars[i], "\n")
   if (variable.names2010[i] %in% c("COMMUNITY", "geohab", "geomorph", "builtfeature")) {
     r_agg_raster<-r
   } else {
@@ -1631,13 +1365,15 @@ file_paths_tif2022 <- file_paths_tif2022[-indices_to_remove]
 
 # # e.g. Find the column number for "Age"
 # column_number <- which(names(df) == "Age")
-variable.names2022 <- c("mask", names(train_data_b)[c(8,34,12,13,11,10,32,6,7,22,27,30,17,16,18,25,14,33,19,26,15,31)]) #here make sure the order is the same as above, if you're using different data
+variable.names2022 <- c("mask", names(unmodified)[c(11,27,13,16,25,15,12,22,9,18,26,17)]) #here make sure the order is the same as above, if you're using different data
 processed_layers2022 <- list() # Initialize an empty list to store processed layers
 
-for(i in 1:length(file_paths_tif2022)) { 
+modeled.vars2022<-file_paths_tif2022[c(1,6,12,5,15,17,22,4,11,7,16,21,14)]
+
+for(i in 1:length(modeled.vars2022)) { 
   # Load each .tif file as a RasterLayer object
-  r <- raster(file_paths_tif2022[i])
-  cat(file_paths_tif2022[i], "\n")
+  r <- raster(modeled.vars2022[i])
+  cat(modeled.vars2022[i], "\n")
   if (variable.names2022[i] %in% c("COMMUNITY", "geohab", "geomorph", "builtfeature")) {
     r_agg_raster<-r
   } else {
@@ -1671,30 +1407,30 @@ preddat2022<- preddat2022[!is.na(preddat2022$mask),]
 
 
 
-#categorical variables - obtain factor levels
-COMMUNITY1<-terra::vect("../enviro datasets/NESP predicted distribution of seagrass communities/Shapefiles/GBR_NESP-TWQ-5.4_JCU_Seagrass-communities_20201203.shp")
-levels<-levels(as.factor(COMMUNITY1$COMMUNITY))
-# Recover the original factor levels for the aggregated raster
-preddat2022$COMMUNITY<-factor(preddat2022$COMMUNITY, levels=1:length(levels), labels=levels)
-preddat$COMMUNITY<-factor(preddat$COMMUNITY, levels=1:length(levels), labels=levels)
+# #categorical variables - obtain factor levels
+# COMMUNITY1<-terra::vect("../enviro datasets/NESP predicted distribution of seagrass communities/Shapefiles/GBR_NESP-TWQ-5.4_JCU_Seagrass-communities_20201203.shp")
+# levels<-levels(as.factor(COMMUNITY1$COMMUNITY))
+# # Recover the original factor levels for the aggregated raster
+# preddat2022$COMMUNITY<-factor(preddat2022$COMMUNITY, levels=1:length(levels), labels=levels)
+# preddat$COMMUNITY<-factor(preddat$COMMUNITY, levels=1:length(levels), labels=levels)
 
 # builtfeature<-terra::vect("../enviro datasets/Breakwaters, groynes, seawalls, marinas/QSC_Extracted_Data_20231018_085138072000-40848/data.gdb")
 # levels<-levels(as.factor(builtfeature$FEATURETYPE))
 # preddat2022$builtfeature<- factor(preddat2022$builtfeature, levels=1:length(levels), labels=levels)
 # preddat$builtfeature<- factor(preddat$builtfeature, levels=1:length(levels), labels=levels)
 
-geohab<-terra::vect("../enviro datasets/qld_geohab_av/czm/pristine_ests/release/qld/shape/geohab_qld_v2.shp")
-levels<-levels(as.factor(geohab$GH_TYPE))
-preddat2022$geohab<-factor(preddat2022$geohab, levels=1:length(levels), labels=levels)
-preddat$geohab<-factor(preddat$geohab, levels=1:length(levels), labels=levels)
+# geohab<-terra::vect("../enviro datasets/qld_geohab_av/czm/pristine_ests/release/qld/shape/geohab_qld_v2.shp")
+# levels<-levels(as.factor(geohab$GH_TYPE))
+# preddat2022$geohab<-factor(preddat2022$geohab, levels=1:length(levels), labels=levels)
+# preddat$geohab<-factor(preddat$geohab, levels=1:length(levels), labels=levels)
+# 
+# geomorph<-terra::vect("../enviro datasets/Heap2008Geomorphology.shp")
+# levels<-levels(as.factor(geomorph$feature))
+# preddat2022$geomorph<-factor(preddat2022$geomorph, levels=1:length(levels), labels=levels)
+# preddat$geomorph<-factor(preddat$geomorph, levels=1:length(levels), labels=levels)
 
-geomorph<-terra::vect("../enviro datasets/Heap2008Geomorphology.shp")
-levels<-levels(as.factor(geomorph$feature))
-preddat2022$geomorph<-factor(preddat2022$geomorph, levels=1:length(levels), labels=levels)
-preddat$geomorph<-factor(preddat$geomorph, levels=1:length(levels), labels=levels)
-
-write.csv(preddat, "preddat.grid.background.csv")
-write.csv(preddat2022, "preddat2022.grid.background.csv")
+write.csv(preddat, "preddat.grid.csv")
+write.csv(preddat2022, "preddat2022.grid.csv")
 ```
 
 ```{r}
@@ -1712,69 +1448,6 @@ yllcorner <- ymin(raster_extent)
 
 ```{r}
 source("../Elith 2008 tutorial/brt.functions.R")
-dist2rivers1<-Dist2Rivers1
-preddat$dist2rivers1<-preddat$Dist2Rivers1
-unmodgrid2010<-gbm.predict.grids(BRT.backgroundunmod, # change this when you have all the rasters, this step takes a really long time
-                  preddat, 
-                  want.grids = T, 
-                  sp.name ="backgroundunmod_preds",
-                  pred.vec = rep(-9999,20428380), # adjust number of rows in your data
-                  filepath = "brtpred/", 
-                  num.col =4340, 
-                  num.row = 4707, 
-                  xll = xllcorner, # make sure exports have the right spatial offset
-                  yll = yllcorner, 
-                  cell.size = 500, 
-                  no.data = -9999,
-                  plot=T)
-saveRDS(unmodgrid2010, "grid2010unmod2.Rds")
-
-modgrid2010<-gbm.predict.grids(BRT.backgroundGL, 
-                  preddat, 
-                  want.grids = T, 
-                  sp.name ="backgroundGL_preds",
-                  pred.vec = rep(-9999,20428380), # adjust number of rows in your data
-                  filepath = "brtpred/", 
-                  num.col =4340, 
-                  num.row = 4707, 
-                  xll = xllcorner, 
-                  yll = yllcorner, 
-                  cell.size = 500, 
-                  no.data = -9999,
-                  plot=T)
-saveRDS(modgrid2010, "grid2010mod2.Rds")
-```
-```{r}
-preddat2022$dist2rivers1<-preddat2022$Dist2Rivers1
-unmodgrid2022<-gbm.predict.grids(BRT.backgroundunmod, # change this when you have all the rasters, this step takes a really long time
-                  preddat2022, 
-                  want.grids = T, 
-                  sp.name ="backgroundunmod_preds2022",
-                  pred.vec = rep(-9999,20428380), # adjust number of rows in your data
-                  filepath = "brtpred/", 
-                  num.col =4340, 
-                  num.row = 4707, 
-                  xll = xllcorner, 
-                  yll = yllcorner, 
-                  cell.size = 500, 
-                  no.data = -9999,
-                  plot=T)
-saveRDS(unmodgrid2022, "grid2022unmod2.Rds")
-
-modgrid2022<-gbm.predict.grids(BRT.backgroundGL, 
-                  preddat2022, 
-                  want.grids = T, 
-                  sp.name ="backgroundGL_preds2022",
-                  pred.vec = rep(-9999,20428380), # adjust number of rows in your data
-                  filepath = "brtpred/", 
-                  num.col =4340, 
-                  num.row = 4707, 
-                  xll = xllcorner, 
-                  yll = yllcorner, 
-                  cell.size = 500, 
-                  no.data = -9999,
-                  plot=T)
-saveRDS(modgrid2022, "grid2022mod2.Rds")
 ```
 ### crw
 ```{r}
@@ -1782,7 +1455,7 @@ dist2coast<-dist2coast1_2
 preddat$dist2coast<-preddat$dist2coast1_2
 preddat2022$dist2coast<-preddat2022$dist2coast1_2
 
-unmodgrid2010crw<-gbm.predict.grids(BRT.crwunmod, # change this when you have all the rasters, this step takes a really long time
+unmodgrid2010crw<-gbm.predict.grids(final_modelunmod, # change this when you have all the rasters, this step takes a really long time
                   preddat, 
                   want.grids = T, 
                   sp.name ="crwunmod_preds",
@@ -1797,23 +1470,23 @@ unmodgrid2010crw<-gbm.predict.grids(BRT.crwunmod, # change this when you have al
                   plot=T)
 saveRDS(unmodgrid2010crw, "grid2010unmodcrw.Rds")
 
-modgrid2010crw<-gbm.predict.grids(BRT.crwGL, 
-                  preddat, 
-                  want.grids = T, 
-                  sp.name ="crwGL_preds",
-                  pred.vec = rep(-9999,20428380), # adjust number of rows in your data
-                  filepath = "brtpred/", 
-                  num.col =4340, 
-                  num.row = 4707, 
-                  xll = xllcorner, 
-                  yll = yllcorner, 
-                  cell.size = 500, 
-                  no.data = -9999,
-                  plot=T)
-saveRDS(modgrid2010crw, "grid2010modcrw.Rds")
+# modgrid2010crw<-gbm.predict.grids(final_modelGL, 
+#                   preddat, 
+#                   want.grids = T, 
+#                   sp.name ="crwGL_preds",
+#                   pred.vec = rep(-9999,20428380), # adjust number of rows in your data
+#                   filepath = "brtpred/", 
+#                   num.col =4340, 
+#                   num.row = 4707, 
+#                   xll = xllcorner, 
+#                   yll = yllcorner, 
+#                   cell.size = 500, 
+#                   no.data = -9999,
+#                   plot=T)
+# saveRDS(modgrid2010crw, "grid2010modcrw.Rds")
 ```
 ```{r}
-unmodgrid2022crw<-gbm.predict.grids(BRT.crwunmod, # change this when you have all the rasters, this step takes a really long time
+unmodgrid2022crw<-gbm.predict.grids(final_modelunmod, # change this when you have all the rasters, this step takes a really long time
                   preddat2022, 
                   want.grids = T, 
                   sp.name ="crwunmod_preds2022",
@@ -1827,21 +1500,21 @@ unmodgrid2022crw<-gbm.predict.grids(BRT.crwunmod, # change this when you have al
                   no.data = -9999,
                   plot=T)
 saveRDS(unmodgrid2022crw, "grid2022unmodcrw.Rds")
-
-modgrid2022crw<-gbm.predict.grids(BRT.crwGL, 
-                  preddat2022, 
-                  want.grids = T, 
-                  sp.name ="crwGL_preds2022",
-                  pred.vec = rep(-9999,20428380), # adjust number of rows in your data
-                  filepath = "brtpred/", 
-                  num.col =4340, 
-                  num.row = 4707, 
-                  xll = xllcorner, 
-                  yll = yllcorner, 
-                  cell.size = 500, 
-                  no.data = -9999,
-                  plot=T)
-saveRDS(modgrid2022crw, "grid2022modcrw.Rds")
+# 
+# modgrid2022crw<-gbm.predict.grids(BRT.crwGL, 
+#                   preddat2022, 
+#                   want.grids = T, 
+#                   sp.name ="crwGL_preds2022",
+#                   pred.vec = rep(-9999,20428380), # adjust number of rows in your data
+#                   filepath = "brtpred/", 
+#                   num.col =4340, 
+#                   num.row = 4707, 
+#                   xll = xllcorner, 
+#                   yll = yllcorner, 
+#                   cell.size = 500, 
+#                   no.data = -9999,
+#                   plot=T)
+# saveRDS(modgrid2022crw, "grid2022modcrw.Rds")
 ```
 
 ```{r}
@@ -1856,8 +1529,8 @@ saveRDS(modgrid2022crw, "grid2022modcrw.Rds")
 # how much area in 2010 vs 2022
 sum(unmodgrid2022crw>0.5)*250000/1000000
 sum(unmodgrid2010crw>0.5)*250000/1000000
-sum(modgrid2022crw>0.5)*250000/1000000
-sum(modgrid2010crw>0.5)*250000/1000000
+# sum(modgrid2022crw>0.5)*250000/1000000
+# sum(modgrid2010crw>0.5)*250000/1000000
 ```
 ```{r}
 #% within 50km of coastline

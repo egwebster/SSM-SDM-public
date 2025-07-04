@@ -20,7 +20,7 @@ AppendedAll<-read.csv("20240806AppendedAll.csv")
 #remove spatial/temporal where there is too much missing predictor data (eReefs BGC goes until 2019 only)
 AppendedAll%>%arrange(date)%>%slice_sample(n=50000)%>%visdat::vis_miss(warn_large_data = F)
 filtered<-AppendedAll%>%filter(!is.na(Secchi))%>%filter(!is.na(date))
-
+ # this removes 22 turtles tracked early 2010 or post 2019
 background<-filtered%>%
     dplyr::select(!c(X.2, X.1, X))%>%
   mutate(COMMUNITY=factor(COMMUNITY),
@@ -75,6 +75,15 @@ GL<-data_join%>%filter(Deploy.site=="GL")
 unmodified<-data_join%>%filter(!Deploy.site%in%c("GL"))
 ```
 
+```{r}
+# how many presences/pseudo-absences per turtle
+crw %>%
+  mutate(group_id = str_remove(id, "_[^_]+$")) %>%
+  group_by(group_id,data_type)%>%
+  summarise(count=n())%>%
+  pivot_wider(values_from = count, names_from = data_type)%>%
+  View()
+```
 
 
 ```{r}

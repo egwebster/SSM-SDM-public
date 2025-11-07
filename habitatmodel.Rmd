@@ -869,20 +869,21 @@ b.df
 
 # rename stuff for plotting
 names(b.df)[names(b.df)=="var"]<-"Variable"
-b.df$"Variable"<-c("Distance to Reefs",
-                   "Means seawater velocity", 
-                   "Distance to boat ramps", 
-                   "Acute flood frequency", 
-                   "Salinity", 
-                   "Tidal exposure", 
-                   "Distance to coast",
+b.df$"Variable"<-c("Seagrass community type",
                    "Distance to mangroves", 
+                   "Distance to coast", 
+                   "Distance to boat ramps", 
+                   "Distance to reefs",
                    "Distance to rivers", 
+                   "Mean seawater velocity", 
+                   "Chronic floodwater exposure",
+                   "Acute flood frequency", 
                    "Ruggedness", 
+                   "Salinity", 
+                   "Seagrass probability", 
                    "Temperature", 
-                   "Chronic floodwater exposure", 
-                   "Seagrass community type", 
-                   "Seagrass probability")
+                   "Tidal exposure")
+b.df<-b.df%>%arrange(Variable)
 ```
 
 
@@ -1532,14 +1533,14 @@ saveRDS(unmodgrid2022crw, "grid2022unmodcrw.Rds")
 # 
 # unmodgrid2010crw<-readRDS("grid2010unmodcrw.Rds")
 # 
-# modgrid2022crw<-readRDS("grid2022modcrw.Rds")
-# modgrid2010crw<-readRDS("grid2010modcrw.Rds")
+modgrid2022crw<-readRDS("grid2022modcrw.Rds")
+modgrid2010crw<-readRDS("grid2010modcrw.Rds")
 
 # how much area in 2010 vs 2022
 sum(unmodgrid2022crw>0.5)*250000/1000000
 sum(unmodgrid2010crw>0.5)*250000/1000000
-# sum(modgrid2022crw>0.5)*250000/1000000
-# sum(modgrid2010crw>0.5)*250000/1000000
+sum(modgrid2022crw>0.5)*250000/1000000
+sum(modgrid2010crw>0.5)*250000/1000000
 ```
 ```{r}
 #% within 50km of coastline
@@ -1554,15 +1555,15 @@ This was calculated in QGIS by
 # Difference evaluation
 Area? 
 ```{r}
-sum(backgroundGL_preds>0.5) # number of 500m pixels with more than 50% probability of presence
-sum(backgroundGL_preds2022>0.5)/893690 # way less in 2022
-sum(backgroundunmod_preds>0.5) 
-sum(backgroundunmod_preds2022>0.5)/893690 # way less in 2022
+# sum(backgroundGL_preds>0.5) # number of 500m pixels with more than 50% probability of presence
+# sum(backgroundGL_preds2022>0.5)/893690 # way less in 2022
+# sum(backgroundunmod_preds>0.5) 
+# sum(backgroundunmod_preds2022>0.5)/893690 # way less in 2022
 
-sum(crwGL_preds2022>0.5)/893690 # number of 500m pixels with more than 50% probability of presence
-sum(crwunmod_preds2022>0.5)/893690 # way less in 2022, 34608
-sum(crwunmod_preds>0.5)/893690
-sum(crwunmod_preds2022>0.5)/893690 # way less in 2022
+sum(unmodgrid2022crw>0.5)/893690 # number of 500m pixels with more than 50% probability of presence
+sum(modgrid2022crw>0.5)/893690 # way less in 2022, 34608
+sum(modgrid2010crw>0.5)/893690
+sum(unmodgrid2010crw>0.5)/893690 # way less in 2022
 ```
 
 ```{r}
@@ -1641,7 +1642,7 @@ values <- getValues(pixels_greater_than_0_5)
 habitat <- sum(values, na.rm = TRUE)
 
 summary_df$percentage_area<-round(summary_df$total_pixels/habitat,3)
-print(asummary_df)
+print(summary_df)
 
 
 ### ports

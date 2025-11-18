@@ -85,44 +85,10 @@ crw %>%
   View()
 ```
 
-
-```{r}
-# #sample data (75% training 25% testing)
-# # library(caret)
-# set.seed(123)
-# splitIndex <- createDataPartition(data_join$data_type, p = 0.75, list = FALSE)
-# train_data <- data_join[splitIndex, ]
-# test_data <- data_join[-splitIndex, ]
-# 
-# # GL sample
-# splitIndexGL <- createDataPartition(GL$data_type, p = 0.75, list = FALSE)
-# train_dataGL <- GL[splitIndexGL, ]
-# test_dataGL <- GL[-splitIndexGL, ]
-# # unmodified sample
-# splitIndexunmodified <- createDataPartition(unmodified$data_type, p = 0.75, list = FALSE)
-# train_dataunmodified <- unmodified[splitIndexunmodified, ]
-# test_dataunmodified <- unmodified[-splitIndexunmodified, ]
-```
-```{r}
-# set.seed(123)
-# splitIndex_b <- createDataPartition(data_join_b$data_type, p = 0.75, list = FALSE)
-# train_data_b <- data_join_b[splitIndex_b, ]
-# test_data_b <- data_join_b[-splitIndex_b, ]
-# 
-# # GL sample
-# splitIndexGL_b <- createDataPartition(GL_b$data_type, p = 0.75, list = FALSE)
-# train_dataGL_b <- GL_b[splitIndexGL_b, ]
-# test_dataGL_b <- GL_b[-splitIndexGL_b, ]
-# # unmodified sample
-# splitIndexunmodified_b <- createDataPartition(unmodified_b$data_type, p = 0.75, list = FALSE)
-# train_dataunmodified_b <- unmodified_b[splitIndexunmodified_b, ]
-# test_dataunmodified_b <- unmodified_b[-splitIndexunmodified_b, ]
-```
-
 correlation matrix
 ```{r}
 data.num<-select_if(data_join, is.numeric)# include only numeric
-data4cor<-data.num[,c(3:14, 16, 19:21, 24:29)]
+data4cor<-data.num[,c(3, 5:14, 16, 19:21, 24:27)]
 corr<-cor(data4cor, method='pearson', use='pairwise.complete.obs')
 round(corr, 3)
 # extract pairs with 0.7 coeficient or higher
@@ -198,7 +164,7 @@ slope -1
 ruggedness -1
 
 ```{r}
-# plotting relationship of each iredictor with response to inform var.monotone
+# plotting relationship of each predictor with response to inform var.monotone - background data
 data_join_b%>%arrange(dist2recboatfeat)%>%
   mutate(group=ceiling(row_number()/100))%>%
   group_by(group)%>%
@@ -232,100 +198,87 @@ deamangroves 1
 slope 0
 ruggedness 0
 
-# model runs
+# model runs - original
 ```{r}
-
-try(BRT.crw<-gbm.fixed(data=train_data, 
-                       gbm.x=c(6:9, 11:19, 22, 25:27, 30:34), 
-                       gbm.y=3, 
-                       family="bernoulli",
-                       var.monotone=c(0,0,-1,-1,-1,-1,0,0,0,0,0,-1,-1,0,0,0,0,0,0,0,0,0), # dist 2 coast has max values at coast
-                       tree.complexity=5, 
-                       learning.rate = 0.005, 
-                       n.trees = 9000, 
-                       bag.fraction=0.75)) 
-
-
-#brtgl?
-try(BRT.crwGL<-gbm.fixed(data=train_dataGL, 
-                       gbm.x=c(6:9, 11:19, 22, 25:27, 30:34), 
-                       gbm.y=3, 
-                       family="bernoulli",
-                       var.monotone=c(0,0,-1,-1,-1,-1,0,0,0,0,0,-1,-1,0,0,0,0,0,0,0,0,0),
-                       tree.complexity=5, 
-                       learning.rate = 0.005, 
-                       n.trees = 9000, 
-                       bag.fraction=0.75)) 
-#brtunmodified
-try(BRT.crwunmod<-gbm.fixed(data=train_dataunmodified, 
-                       gbm.x=c(6:9, 11:19, 22, 25:27, 30:34), 
-                       gbm.y=3, 
-                       family="bernoulli",
-                       var.monotone=c(0,0,-1,-1,-1,-1,0,0,0,0,0,-1,-1,0,0,0,0,0,0,0,0,0),
-                       tree.complexity=5, 
-                       learning.rate = 0.005, 
-                       n.trees = 9000, 
-                       bag.fraction=0.75))
-saveRDS(BRT.crw, "BRT.crw.Rds")
-saveRDS(BRT.crwGL, "BRT.crwGL.Rds")
-saveRDS(BRT.crwunmod, "BRT.crwunmod.Rds")
+# 
+# try(BRT.crw<-gbm.fixed(data=train_data, 
+#                        gbm.x=c(6:9, 11:19, 22, 25:27, 30:34), 
+#                        gbm.y=3, 
+#                        family="bernoulli",
+#                        var.monotone=c(0,0,-1,-1,-1,-1,0,0,0,0,0,-1,-1,0,0,0,0,0,0,0,0,0), # dist 2 coast has max values at coast
+#                        tree.complexity=5, 
+#                        learning.rate = 0.005, 
+#                        n.trees = 9000, 
+#                        bag.fraction=0.75)) 
+# 
+# 
+# #brtgl?
+# try(BRT.crwGL<-gbm.fixed(data=train_dataGL, 
+#                        gbm.x=c(6:9, 11:19, 22, 25:27, 30:34), 
+#                        gbm.y=3, 
+#                        family="bernoulli",
+#                        var.monotone=c(0,0,-1,-1,-1,-1,0,0,0,0,0,-1,-1,0,0,0,0,0,0,0,0,0),
+#                        tree.complexity=5, 
+#                        learning.rate = 0.005, 
+#                        n.trees = 9000, 
+#                        bag.fraction=0.75)) 
+# #brtunmodified
+# try(BRT.crwunmod<-gbm.fixed(data=train_dataunmodified, 
+#                        gbm.x=c(6:9, 11:19, 22, 25:27, 30:34), 
+#                        gbm.y=3, 
+#                        family="bernoulli",
+#                        var.monotone=c(0,0,-1,-1,-1,-1,0,0,0,0,0,-1,-1,0,0,0,0,0,0,0,0,0),
+#                        tree.complexity=5, 
+#                        learning.rate = 0.005, 
+#                        n.trees = 9000, 
+#                        bag.fraction=0.75))
+# saveRDS(BRT.crw, "BRT.crw.Rds")
+# saveRDS(BRT.crwGL, "BRT.crwGL.Rds")
+# saveRDS(BRT.crwunmod, "BRT.crwunmod.Rds")
 
 ```
 ```{r}
 # models with background sampling
-try(BRT.background1<-gbm.fixed(data=as.data.frame(train_data_b), 
-                       gbm.x=c(6:9, 11:19, 22, 25:27, 30:34), 
-                       gbm.y=3, 
-                       family="bernoulli",
-                       var.monotone=
-                         c(0,0,-1,-1,0,0,-1,0,0,0,0,0,0,1,0,0,0,1,1,1,1,0), 
-                       tree.complexity=5, 
-                       learning.rate = 0.005, 
-                       n.trees = 2000, 
-                       bag.fraction=0.75)) 
-
-
-#brtgl?
-try(BRT.backgroundGL<-gbm.fixed(data=as.data.frame(train_dataGL_b), 
-                       gbm.x=c(6:9, 11:19, 22, 25:27, 30:34), 
-                       gbm.y=3, 
-                       family="bernoulli",
-                       var.monotone=
-                         c(0,0,-1,-1,0,0,-1,0,0,0,0,0,0,1,0,0,0,1,1,1,1,0), 
-                       tree.complexity=5, 
-                       learning.rate = 0.005, 
-                       n.trees = 2000, 
-                       bag.fraction=0.75)) 
-#brtunmodified
-try(BRT.backgroundunmod<-gbm.fixed(data=as.data.frame(train_dataunmodified_b), 
-                       gbm.x=c(6:9, 11:19, 22, 25:27, 30:34), 
-                       gbm.y=3,  
-                       family="bernoulli",
-                       var.monotone=
-                         c(0,0,-1,-1,0,0,-1,0,0,0,0,0,0,1,0,0,0,1,1,1,1,0), 
-                       tree.complexity=5, 
-                       learning.rate = 0.005, 
-                       n.trees = 2000, 
-                       bag.fraction=0.75))
-saveRDS(BRT.background1, "BRT.background1.Rds")
-saveRDS(BRT.backgroundGL, "BRT.backgroundGL.Rds")
-saveRDS(BRT.backgroundunmod, "BRT.backgroundunmod.Rds")
+# try(BRT.background1<-gbm.fixed(data=as.data.frame(train_data_b), 
+#                        gbm.x=c(6:9, 11:19, 22, 25:27, 30:34), 
+#                        gbm.y=3, 
+#                        family="bernoulli",
+#                        var.monotone=
+#                          c(0,0,-1,-1,0,0,-1,0,0,0,0,0,0,1,0,0,0,1,1,1,1,0), 
+#                        tree.complexity=5, 
+#                        learning.rate = 0.005, 
+#                        n.trees = 2000, 
+#                        bag.fraction=0.75)) 
+# 
+# 
+# #brtgl?
+# try(BRT.backgroundGL<-gbm.fixed(data=as.data.frame(train_dataGL_b), 
+#                        gbm.x=c(6:9, 11:19, 22, 25:27, 30:34), 
+#                        gbm.y=3, 
+#                        family="bernoulli",
+#                        var.monotone=
+#                          c(0,0,-1,-1,0,0,-1,0,0,0,0,0,0,1,0,0,0,1,1,1,1,0), 
+#                        tree.complexity=5, 
+#                        learning.rate = 0.005, 
+#                        n.trees = 2000, 
+#                        bag.fraction=0.75)) 
+# #brtunmodified
+# try(BRT.backgroundunmod<-gbm.fixed(data=as.data.frame(train_dataunmodified_b), 
+#                        gbm.x=c(6:9, 11:19, 22, 25:27, 30:34), 
+#                        gbm.y=3,  
+#                        family="bernoulli",
+#                        var.monotone=
+#                          c(0,0,-1,-1,0,0,-1,0,0,0,0,0,0,1,0,0,0,1,1,1,1,0), 
+#                        tree.complexity=5, 
+#                        learning.rate = 0.005, 
+#                        n.trees = 2000, 
+#                        bag.fraction=0.75))
+# saveRDS(BRT.background1, "BRT.background1.Rds")
+# saveRDS(BRT.backgroundGL, "BRT.backgroundGL.Rds")
+# saveRDS(BRT.backgroundunmod, "BRT.backgroundunmod.Rds")
 ```
 
 
-
-
-## load pre-run mods 
-```{r}
-BRT.crw<-readRDS("BRT.crw.Rds")
-BRT.crwGL<-readRDS("BRT.crwGL.Rds")
-BRT.crwunmod<-readRDS("BRT.crwunmod.Rds")
-
-
-BRT.background1<-readRDS("BRT.background1.Rds")
-BRT.backgroundGL<-readRDS("BRT.backgroundGL.Rds")
-BRT.backgroundunmod<-readRDS("BRT.backgroundunmod.Rds")
-```
 
 ##########################
 # re-run with 5-fold CV

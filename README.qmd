@@ -170,21 +170,9 @@ Input rasters for grid predictions as .tif files, excludes MMP grids (exposure a
 
 Ascii grids named as:
 
-GL or unmod, indicating whether Port Curtis (GL) or Shoalwater Bay and Raine Island (unmod) data were used.
+crwunmod, indicating Shoalwater Bay and Raine Island (unmod) data were used.
 
 If 2022 is specified, model prediction is based on environmental predictor data from December 2022, otherwise environmental predictor data are from December 2010.
-
--   backgroundGL_preds.asc
-
--   backgroundGL_preds2022.asc
-
--   backgroundunmod_preds.asc
-
--   backgroundunmod_preds2022.asc
-
--   crwGL_preds.asc
-
--   crwCL_preds2022.asc
 
 -   crwunmod_preds.asc
 
